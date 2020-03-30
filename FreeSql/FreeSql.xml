@@ -842,7 +842,8 @@
         </member>
         <member name="M:FreeSql.IDelete`1.ExecuteDeleted">
             <summary>
-            执行SQL语句，返回被删除的记录
+            执行SQL语句，返回被删除的记录<para></para>
+            注意：此方法只有 Postgresql/SqlServer 有效果
             </summary>
             <returns></returns>
         </member>
@@ -951,13 +952,15 @@
         </member>
         <member name="M:FreeSql.IInsert`1.ExecuteIdentity">
             <summary>
-            执行SQL语句，返回自增值
+            执行SQL语句，返回自增值<para></para>
+            注意：请检查实体类是否标记了 [Column(IsIdentity = true)]
             </summary>
             <returns></returns>
         </member>
         <member name="M:FreeSql.IInsert`1.ExecuteInserted">
             <summary>
-            执行SQL语句，返回插入后的记录
+            执行SQL语句，返回插入后的记录<para></para>
+            注意：此方法只有 Postgresql/SqlServer 有效果
             </summary>
             <returns></returns>
         </member>
@@ -1036,7 +1039,7 @@
         <member name="M:FreeSql.ISelect0`2.ToDictionary``1(System.Func{`1,``0})">
             <summary>
             以字典的形式返回查询结果<para></para>
-            注意：字典的特点会导致 OrderBy 排序失效
+            注意：字典的特点会导致返回的数据无序
             </summary>
             <typeparam name="TKey"></typeparam>
             <param name="keySelector"></param>
@@ -2109,7 +2112,8 @@
         </member>
         <member name="M:FreeSql.IUpdate`1.ExecuteUpdated">
             <summary>
-            执行SQL语句，返回更新后的记录
+            执行SQL语句，返回更新后的记录<para></para>
+            注意：此方法只有 Postgresql/SqlServer 有效果
             </summary>
             <returns></returns>
         </member>
@@ -2126,6 +2130,16 @@
         <member name="P:FreeSql.IAdo.DataType">
             <summary>
             数据库类型
+            </summary>
+        </member>
+        <member name="P:FreeSql.IAdo.ConnectionString">
+            <summary>
+            UseConnectionString 时候的值
+            </summary>
+        </member>
+        <member name="P:FreeSql.IAdo.SlaveConnectionStrings">
+            <summary>
+            UseSalve 时候的值
             </summary>
         </member>
         <member name="M:FreeSql.IAdo.Transaction(System.Action)">
@@ -3194,11 +3208,11 @@
             <param name="end"></param>
             <returns></returns>
         </member>
-        <member name="M:FreeSqlGlobalExtensions.DisplayCsharp(System.Type)">
+        <member name="M:FreeSqlGlobalExtensions.DisplayCsharp(System.Type,System.Boolean)">
             <summary>
             获取 Type 的原始 c# 文本表示
             </summary>
-            <param name="that"></param>
+            <param name="type"></param>
             <returns></returns>
         </member>
         <member name="M:FreeSqlGlobalExtensions.Distance(System.Drawing.Point,System.Drawing.Point)">
@@ -3305,7 +3319,6 @@
             <summary>
             使用 and 拼接两个 lambda 表达式
             </summary>
-            <typeparam name="T"></typeparam>
             <param name="exp1"></param>
             <param name="condition">true 时生效</param>
             <param name="exp2"></param>
@@ -3321,7 +3334,6 @@
             <summary>
             使用 or 拼接两个 lambda 表达式
             </summary>
-            <typeparam name="T"></typeparam>
             <param name="exp1"></param>
             <param name="condition">true 时生效</param>
             <param name="exp2"></param>
@@ -3331,7 +3343,158 @@
             <summary>
             将 lambda 表达式取反
             </summary>
-            <typeparam name="T"></typeparam>
+            <param name="exp"></param>
+            <param name="condition">true 时生效</param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.And``2(System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}})">
+            <summary>
+            使用 and 拼接两个 lambda 表达式
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.And``2(System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Boolean,System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}})">
+            <summary>
+            使用 and 拼接两个 lambda 表达式
+            </summary>
+            <param name="exp1"></param>
+            <param name="condition">true 时生效</param>
+            <param name="exp2"></param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Or``2(System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}})">
+            <summary>
+            使用 or 拼接两个 lambda 表达式
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Or``2(System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Boolean,System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}})">
+            <summary>
+            使用 or 拼接两个 lambda 表达式
+            </summary>
+            <param name="exp1"></param>
+            <param name="condition">true 时生效</param>
+            <param name="exp2"></param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Not``2(System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Boolean)">
+            <summary>
+            将 lambda 表达式取反
+            </summary>
+            <param name="exp"></param>
+            <param name="condition">true 时生效</param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.And``3(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}},System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}})">
+            <summary>
+            使用 and 拼接两个 lambda 表达式
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.And``3(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}},System.Boolean,System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}})">
+            <summary>
+            使用 and 拼接两个 lambda 表达式
+            </summary>
+            <param name="exp1"></param>
+            <param name="condition">true 时生效</param>
+            <param name="exp2"></param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Or``3(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}},System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}})">
+            <summary>
+            使用 or 拼接两个 lambda 表达式
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Or``3(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}},System.Boolean,System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}})">
+            <summary>
+            使用 or 拼接两个 lambda 表达式
+            </summary>
+            <param name="exp1"></param>
+            <param name="condition">true 时生效</param>
+            <param name="exp2"></param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Not``3(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,System.Boolean}},System.Boolean)">
+            <summary>
+            将 lambda 表达式取反
+            </summary>
+            <param name="exp"></param>
+            <param name="condition">true 时生效</param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.And``4(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}},System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}})">
+            <summary>
+            使用 and 拼接两个 lambda 表达式
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.And``4(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}},System.Boolean,System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}})">
+            <summary>
+            使用 and 拼接两个 lambda 表达式
+            </summary>
+            <param name="exp1"></param>
+            <param name="condition">true 时生效</param>
+            <param name="exp2"></param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Or``4(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}},System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}})">
+            <summary>
+            使用 or 拼接两个 lambda 表达式
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Or``4(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}},System.Boolean,System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}})">
+            <summary>
+            使用 or 拼接两个 lambda 表达式
+            </summary>
+            <param name="exp1"></param>
+            <param name="condition">true 时生效</param>
+            <param name="exp2"></param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Not``4(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,System.Boolean}},System.Boolean)">
+            <summary>
+            将 lambda 表达式取反
+            </summary>
+            <param name="exp"></param>
+            <param name="condition">true 时生效</param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.And``5(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}},System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}})">
+            <summary>
+            使用 and 拼接两个 lambda 表达式
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.And``5(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}},System.Boolean,System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}})">
+            <summary>
+            使用 and 拼接两个 lambda 表达式
+            </summary>
+            <param name="exp1"></param>
+            <param name="condition">true 时生效</param>
+            <param name="exp2"></param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Or``5(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}},System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}})">
+            <summary>
+            使用 or 拼接两个 lambda 表达式
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Or``5(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}},System.Boolean,System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}})">
+            <summary>
+            使用 or 拼接两个 lambda 表达式
+            </summary>
+            <param name="exp1"></param>
+            <param name="condition">true 时生效</param>
+            <param name="exp2"></param>
+            <returns></returns>
+        </member>
+        <member name="M:System.Linq.Expressions.LambadaExpressionExtensions.Not``5(System.Linq.Expressions.Expression{System.Func{``0,``1,``2,``3,``4,System.Boolean}},System.Boolean)">
+            <summary>
+            将 lambda 表达式取反
+            </summary>
             <param name="exp"></param>
             <param name="condition">true 时生效</param>
             <returns></returns>

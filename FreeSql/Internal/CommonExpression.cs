@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using FreeSql.DataAnnotations;
 using System.Threading;
+using System.Globalization;
 
 namespace FreeSql.Internal
 {
@@ -1021,6 +1022,7 @@ namespace FreeSql.Internal
                     other3Exp = ExpressionLambdaToSqlOther(exp3, tsc);
                     if (string.IsNullOrEmpty(other3Exp) == false) return other3Exp;
                     if (exp3.IsParameter() == false) return formatSql(Expression.Lambda(exp3).Compile().DynamicInvoke(), tsc.mapType, tsc.mapColumnTmp, tsc.dbParams);
+                    if (exp3.Method.DeclaringType == typeof(Enumerable)) throw new Exception($"未实现函数表达式 {exp3} 解析。如果正在操作导航属性集合，请使用 .AsSelect().{exp3.Method.Name}({(exp3.Arguments.Count > 1 ? "..." : "")})");
                     throw new Exception($"未实现函数表达式 {exp3} 解析");
                 case ExpressionType.Parameter:
                 case ExpressionType.MemberAccess:
@@ -1292,6 +1294,8 @@ namespace FreeSql.Internal
                                     }
                                     if (tb2.ColumnsByCsIgnore.ContainsKey(mp2.Member.Name))
                                         throw new ArgumentException($"{tb2.DbName}.{mp2.Member.Name} 被忽略，请检查 IsIgnore 设置，确认 get/set 为 public");
+                                    if (tb2.GetTableRef(mp2.Member.Name, false) != null)
+                                        throw new ArgumentException($"{tb2.DbName}.{mp2.Member.Name} 导航属性集合忘了 .AsSelect() 吗？如果在 ToList(a => a.{mp2.Member.Name}) 中使用，请移步参考 IncludeMany 文档。");
                                     throw new ArgumentException($"{tb2.DbName} 找不到列 {mp2.Member.Name}");
                                 }
                                 var col2 = tb2.ColumnsByCs[mp2.Member.Name];
@@ -1498,7 +1502,8 @@ namespace FreeSql.Internal
                     mapType ?? mapColumn?.Attribute.MapType ?? obj?.GetType(), mapType == null ? obj : Utils.GetDataReaderValue(mapType, obj));
                 return _common.QuoteParamterName(paramName);
             }
-            return string.Concat(_ado.AddslashesProcessParam(obj, mapType, mapColumn));
+            return string.Format(CultureInfo.InvariantCulture, "{0}", _ado.AddslashesProcessParam(obj, mapType, mapColumn));
+            //return string.Concat(_ado.AddslashesProcessParam(obj, mapType, mapColumn));
         }
     }
 }

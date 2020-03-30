@@ -36,6 +36,7 @@ FreeSql 是功能强大的对象关系映射技术(O/RM)，支持 .NETCore 2.1+ 
 
 > 学习项目
 
+- [zhontai.net Admin后台管理系统](https://github.com/zhontai/Admin.Core)
 - [😃 A simple and practical CMS implememted by .NET Core 2.2](https://github.com/luoyunchong/lin-cms-dotnetcore)
 - [内容管理系统](https://github.com/hejiyong/fscms)
 
@@ -205,7 +206,7 @@ Elapsed: 00:00:00.6495301; Query Entity Counts: 131072; ORM: Dapper
 
 ## Donation
 
-L*y 58元、花花 88元、麦兜很乖 50元、网络来者 2000元、John 99.99元、alex 666元
+L*y 58元、花花 88元、麦兜很乖 50元、网络来者 2000元、John 99.99元、alex 666元、bacongao 36元
 
 > Thank you for your donation
 
