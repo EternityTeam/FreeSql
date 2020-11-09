@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FreeSql.Internal.Model;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -7,13 +8,14 @@ using System.Threading.Tasks;
 
 namespace FreeSql
 {
-    public interface ISelect<T1> : ISelect0<ISelect<T1>, T1>, ILinqToSql<T1> where T1 : class
+    public interface ISelect<T1> : ISelect0<ISelect<T1>, T1>
     {
 
 #if net40
 #else
         Task<bool> AnyAsync(Expression<Func<T1, bool>> exp);
 
+        Task<int> InsertIntoAsync<TTargetEntity>(string tableName, Expression<Func<T1, TTargetEntity>> select) where TTargetEntity : class;
         Task<DataTable> ToDataTableAsync<TReturn>(Expression<Func<T1, TReturn>> select);
         Task<List<TReturn>> ToListAsync<TReturn>(Expression<Func<T1, TReturn>> select);
         Task<List<TDto>> ToListAsync<TDto>();
@@ -38,6 +40,15 @@ namespace FreeSql
         bool Any(Expression<Func<T1, bool>> exp);
 
         /// <summary>
+        /// 将查询转换为 INSERT INTO tableName SELECT ... FROM t 执行插入
+        /// </summary>
+        /// <typeparam name="TTargetEntity"></typeparam>
+        /// <param name="tableName">指定插入的表名，若为 null 则使用 TTargetEntity 实体表名</param>
+        /// <param name="select">选择列</param>
+        /// <returns>返回影响的行数</returns>
+        int InsertInto<TTargetEntity>(string tableName, Expression<Func<T1, TTargetEntity>> select) where TTargetEntity : class;
+
+        /// <summary>
         /// 执行SQL查询，返回 DataTable
         /// </summary>
         /// <returns></returns>
@@ -56,6 +67,14 @@ namespace FreeSql
         /// <typeparam name="TDto"></typeparam>
         /// <returns></returns>
         List<TDto> ToList<TDto>();
+        /// <summary>
+        /// 执行SQL查询，分块返回数据，可减少内存开销。比如读取10万条数据，每次返回100条处理。
+        /// </summary>
+        /// <typeparam name="TReturn">返回类型</typeparam>
+        /// <param name="select">选择列</param>
+        /// <param name="size">数据块的大小</param>
+        /// <param name="done">处理数据块</param>
+        void ToChunk<TReturn>(Expression<Func<T1, TReturn>> select, int size, Action<FetchCallbackArgs<List<TReturn>>> done);
 
         /// <summary>
         /// 执行SQL查询，返回指定字段的记录的第一条记录，记录不存在时返回 TReturn 默认值
@@ -101,6 +120,17 @@ namespace FreeSql
         /// <param name="select"></param>
         /// <returns></returns>
         TReturn ToAggregate<TReturn>(Expression<Func<ISelectGroupingAggregate<T1>, TReturn>> select);
+        /// <summary>
+        /// 执行SQL查询，返回指定字段的聚合结果给 output 参数<para></para>
+        /// fsql.Select&lt;T&gt;()<para></para>
+        /// .Aggregate(a =&gt; new { count = a.Count, sum = a.Sum(a.Key.Price) }, out var agg)<para></para>
+        /// .Page(1, 10).ToList();
+        /// </summary>
+        /// <typeparam name="TReturn"></typeparam>
+        /// <param name="select"></param>
+        /// <param name="result"></param>
+        /// <returns></returns>
+        ISelect<T1> Aggregate<TReturn>(Expression<Func<ISelectGroupingAggregate<T1>, TReturn>> select, out TReturn result);
 
         /// <summary>
         /// 求和
@@ -145,98 +175,21 @@ namespace FreeSql
         /// <param name="exp"></param>
         /// <returns></returns>
         ISelect<T1, T2> From<T2>(Expression<Func<ISelectFromExpression<T1>, T2, ISelectFromExpression<T1>>> exp) where T2 : class;
-        /// <summary>
-        /// 多表查询
-        /// </summary>
-        /// <typeparam name="T2"></typeparam>
-        /// <typeparam name="T3"></typeparam>
-        /// <param name="exp"></param>
-        /// <returns></returns>
         ISelect<T1, T2, T3> From<T2, T3>(Expression<Func<ISelectFromExpression<T1>, T2, T3, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class;
-        /// <summary>
-        /// 多表查询
-        /// </summary>
-        /// <typeparam name="T2"></typeparam>
-        /// <typeparam name="T3"></typeparam>
-        /// <typeparam name="T4"></typeparam>
-        /// <param name="exp"></param>
-        /// <returns></returns>
         ISelect<T1, T2, T3, T4> From<T2, T3, T4>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class;
-        /// <summary>
-        /// 多表查询
-        /// </summary>
-        /// <typeparam name="T2"></typeparam>
-        /// <typeparam name="T3"></typeparam>
-        /// <typeparam name="T4"></typeparam>
-        /// <typeparam name="T5"></typeparam>
-        /// <param name="exp"></param>
-        /// <returns></returns>
         ISelect<T1, T2, T3, T4, T5> From<T2, T3, T4, T5>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class;
-        /// <summary>
-        /// 多表查询
-        /// </summary>
-        /// <typeparam name="T2"></typeparam>
-        /// <typeparam name="T3"></typeparam>
-        /// <typeparam name="T4"></typeparam>
-        /// <typeparam name="T5"></typeparam>
-        /// <typeparam name="T6"></typeparam>
-        /// <param name="exp"></param>
-        /// <returns></returns>
         ISelect<T1, T2, T3, T4, T5, T6> From<T2, T3, T4, T5, T6>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class;
-        /// <summary>
-        /// 多表查询
-        /// </summary>
-        /// <typeparam name="T2"></typeparam>
-        /// <typeparam name="T3"></typeparam>
-        /// <typeparam name="T4"></typeparam>
-        /// <typeparam name="T5"></typeparam>
-        /// <typeparam name="T6"></typeparam>
-        /// <typeparam name="T7"></typeparam>
-        /// <param name="exp"></param>
-        /// <returns></returns>
         ISelect<T1, T2, T3, T4, T5, T6, T7> From<T2, T3, T4, T5, T6, T7>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class;
-        /// <summary>
-        /// 多表查询
-        /// </summary>
-        /// <typeparam name="T2"></typeparam>
-        /// <typeparam name="T3"></typeparam>
-        /// <typeparam name="T4"></typeparam>
-        /// <typeparam name="T5"></typeparam>
-        /// <typeparam name="T6"></typeparam>
-        /// <typeparam name="T7"></typeparam>
-        /// <typeparam name="T8"></typeparam>
-        /// <param name="exp"></param>
-        /// <returns></returns>
         ISelect<T1, T2, T3, T4, T5, T6, T7, T8> From<T2, T3, T4, T5, T6, T7, T8>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class;
-        /// <summary>
-        /// 多表查询
-        /// </summary>
-        /// <typeparam name="T2"></typeparam>
-        /// <typeparam name="T3"></typeparam>
-        /// <typeparam name="T4"></typeparam>
-        /// <typeparam name="T5"></typeparam>
-        /// <typeparam name="T6"></typeparam>
-        /// <typeparam name="T7"></typeparam>
-        /// <typeparam name="T8"></typeparam>
-        /// <typeparam name="T9"></typeparam>
-        /// <param name="exp"></param>
-        /// <returns></returns>
         ISelect<T1, T2, T3, T4, T5, T6, T7, T8, T9> From<T2, T3, T4, T5, T6, T7, T8, T9>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, T9, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class where T9 : class;
-        /// <summary>
-        /// 多表查询
-        /// </summary>
-        /// <typeparam name="T2"></typeparam>
-        /// <typeparam name="T3"></typeparam>
-        /// <typeparam name="T4"></typeparam>
-        /// <typeparam name="T5"></typeparam>
-        /// <typeparam name="T6"></typeparam>
-        /// <typeparam name="T7"></typeparam>
-        /// <typeparam name="T8"></typeparam>
-        /// <typeparam name="T9"></typeparam>
-        /// <typeparam name="T10"></typeparam>
-        /// <param name="exp"></param>
-        /// <returns></returns>
         ISelect<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10> From<T2, T3, T4, T5, T6, T7, T8, T9, T10>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, T9, T10, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class where T9 : class where T10 : class;
+        
+        ISelect<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11> From<T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class where T9 : class where T10 : class where T11 : class;
+        ISelect<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> From<T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class where T9 : class where T10 : class where T11 : class where T12 : class;
+        ISelect<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13> From<T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class where T9 : class where T10 : class where T11 : class where T12 : class where T13 : class;
+        ISelect<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14> From<T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class where T9 : class where T10 : class where T11 : class where T12 : class where T13 : class where T14 : class;
+        ISelect<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15> From<T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class where T9 : class where T10 : class where T11 : class where T12 : class where T13 : class where T14 : class where T15 : class;
+        ISelect<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16> From<T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16>(Expression<Func<ISelectFromExpression<T1>, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, ISelectFromExpression<T1>>> exp) where T2 : class where T3 : class where T4 : class where T5 : class where T6 : class where T7 : class where T8 : class where T9 : class where T10 : class where T11 : class where T12 : class where T13 : class where T14 : class where T15 : class where T16 : class;
 
         /// <summary>
         /// 查询条件，Where(a => a.Id > 10)，支持导航对象查询，Where(a => a.Author.Email == "2881099@qq.com")
@@ -292,7 +245,7 @@ namespace FreeSql
         /// <returns></returns>
         ISelect<T1> Where<T2, T3, T4, T5>(Expression<Func<T1, T2, T3, T4, T5, bool>> exp) where T2 : class where T3 : class where T4 : class where T5 : class;
         /// <summary>
-        /// 传入动态对象如：主键值 | new[]{主键值1,主键值2} | TEntity1 | new[]{TEntity1,TEntity2} | new{id=1}
+        /// 传入动态条件，如：主键值 | new[]{主键值1,主键值2} | TEntity1 | new[]{TEntity1,TEntity2} | new{id=1}
         /// </summary>
         /// <param name="dywhere">主键值、主键值集合、实体、实体集合、匿名对象、匿名对象集合</param>
         /// <param name="not">是否标识为NOT</param>
@@ -337,6 +290,15 @@ namespace FreeSql
         /// <returns></returns>
         ISelect<T1> OrderBy<TMember>(bool condition, Expression<Func<T1, TMember>> column);
         /// <summary>
+        /// 按列排序，OrderByIf(true, a => a.Time)
+        /// </summary>
+        /// <typeparam name="TMember"></typeparam>
+        /// <param name="condition">true 时生效</param>
+        /// <param name="column"></param>
+        /// <param name="descending">true: DESC, false: ASC</param>
+        /// <returns></returns>
+        ISelect<T1> OrderByIf<TMember>(bool condition, Expression<Func<T1, TMember>> column, bool descending = false);
+        /// <summary>
         /// 按列倒向排序，OrderByDescending(a => a.Time)
         /// </summary>
         /// <param name="column">列</param>
@@ -372,19 +334,21 @@ namespace FreeSql
         ISelect<T1> IncludeMany<TNavigate>(Expression<Func<T1, IEnumerable<TNavigate>>> navigateSelector, Action<ISelect<TNavigate>> then = null) where TNavigate : class;
 
         /// <summary>
-        /// 实现 select .. from ( select ... from t ) a 这样的功能<para></para>
-        /// 使用 AsTable 方法也可以达到效果
+        /// 按属性名字符串进行 Include/IncludeMany 操作
         /// </summary>
-        /// <param name="sql">SQL语句</param>
+        /// <param name="property"></param>
         /// <returns></returns>
-        ISelect<T1> WithSql(string sql);
+        ISelect<T1> IncludeByPropertyName(string property);
 
         /// <summary>
-        /// 将 ISelect&lt;T1&gt; 转换为 IQueryable&lt;T1&gt;<para></para>
-        /// 此方法主要用于扩展，比如：abp IRepository GetAll() 接口方法需要返回 IQueryable 对象<para></para>
-        /// 注意：IQueryable 方法污染较为严重，请尽量避免此转换
+        /// 实现 select .. from ( select ... from t ) a 这样的功能<para></para>
+        /// 使用 AsTable 方法也可以达到效果<para></para>
+        /// 示例：WithSql("select * from id=?id", new { id = 1 })<para></para>
+        /// 提示：parms 参数还可以传 Dictionary&lt;string, object&gt;
         /// </summary>
+        /// <param name="sql">SQL语句</param>
+        /// <param name="parms">参数</param>
         /// <returns></returns>
-        IQueryable<T1> AsQueryable();
+        ISelect<T1> WithSql(string sql, object parms = null);
     }
 }

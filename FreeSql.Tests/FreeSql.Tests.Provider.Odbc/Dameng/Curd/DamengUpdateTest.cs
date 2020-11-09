@@ -24,9 +24,9 @@ namespace FreeSql.Tests.Odbc.Dameng
         public void Dywhere()
         {
             Assert.Null(g.dameng.Update<Topic>().ToSql());
-            Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test' \r\nWHERE (\"ID\" = 1 OR \"ID\" = 2)", g.dameng.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").ToSql());
+            Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test' \r\nWHERE (\"ID\" IN (1,2))", g.dameng.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").ToSql());
             Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test1' \r\nWHERE (\"ID\" = 1)", g.dameng.Update<Topic>(new Topic { Id = 1, Title = "test" }).SetRaw("title='test1'").ToSql());
-            Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test1' \r\nWHERE (\"ID\" = 1 OR \"ID\" = 2)", g.dameng.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").ToSql());
+            Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test1' \r\nWHERE (\"ID\" IN (1,2))", g.dameng.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").ToSql());
             Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test1' \r\nWHERE (\"ID\" = 1)", g.dameng.Update<Topic>(new { id = 1 }).SetRaw("title='test1'").ToSql());
         }
 
@@ -73,6 +73,20 @@ namespace FreeSql.Tests.Odbc.Dameng
             public string xx { get; set; }
         }
         [Fact]
+        public void SetSourceIgnore()
+        {
+            Assert.Equal("UPDATE \"TSSI01\" SET \"TINT\" = 10 WHERE (\"ID\" = '00000000-0000-0000-0000-000000000000')",
+                g.dameng.Update<tssi01>().NoneParameter()
+                    .SetSourceIgnore(new tssi01 { id = Guid.Empty, tint = 10 }, col => col == null).ToSql().Replace("\r\n", ""));
+        }
+        public class tssi01
+        {
+            [Column(CanUpdate = false)]
+            public Guid id { get; set; }
+            public int tint { get; set; }
+            public string title { get; set; }
+        }
+        [Fact]
         public void IgnoreColumns()
         {
             var sql = update.SetSource(new Topic { Id = 1, Title = "newtitle" }).IgnoreColumns(a => new { a.Clicks, a.CreateTime }).ToSql().Replace("\r\n", "");
@@ -115,6 +129,9 @@ namespace FreeSql.Tests.Odbc.Dameng
 
             sql = update.Set(a => a.Id == 10).Where(a => a.Id == 1).ToSql().Replace("\r\n", "");
             Assert.Equal("UPDATE \"TB_TOPIC\" SET \"ID\" = 10 WHERE (\"ID\" = 1)", sql);
+
+            sql = update.Set(a => a.Clicks == null).Where(a => a.Id == 1).ToSql().Replace("\r\n", "");
+            Assert.Equal("UPDATE \"TB_TOPIC\" SET \"CLICKS\" = NULL WHERE (\"ID\" = 1)", sql);
         }
         [Fact]
         public void SetRaw()
@@ -164,9 +181,9 @@ namespace FreeSql.Tests.Odbc.Dameng
         public void AsTable()
         {
             Assert.Null(g.dameng.Update<Topic>().ToSql());
-            Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test' \r\nWHERE (\"ID\" = 1 OR \"ID\" = 2)", g.dameng.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").AsTable(a => "tb_topicAsTable").ToSql());
+            Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test' \r\nWHERE (\"ID\" IN (1,2))", g.dameng.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").AsTable(a => "tb_topicAsTable").ToSql());
             Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test1' \r\nWHERE (\"ID\" = 1)", g.dameng.Update<Topic>(new Topic { Id = 1, Title = "test" }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
-            Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test1' \r\nWHERE (\"ID\" = 1 OR \"ID\" = 2)", g.dameng.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
+            Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test1' \r\nWHERE (\"ID\" IN (1,2))", g.dameng.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
             Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test1' \r\nWHERE (\"ID\" = 1)", g.dameng.Update<Topic>(new { id = 1 }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
         }
     }

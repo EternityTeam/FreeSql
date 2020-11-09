@@ -1,9 +1,7 @@
 ﻿using FreeSql.Internal;
-using FreeSql.Internal.ObjectPool;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -21,34 +19,14 @@ namespace FreeSql.Odbc.SqlServer
         public override long ExecuteIdentity() => base.SplitExecuteIdentity(_batchValuesLimit > 0 ? _batchValuesLimit : 1000, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
         public override List<T1> ExecuteInserted() => base.SplitExecuteInserted(_batchValuesLimit > 0 ? _batchValuesLimit : 1000, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
 
-        protected override int RawExecuteAffrows()
+        public override string ToSql()
         {
             var versionGreaterThan10 = (_commonUtils as OdbcSqlServerUtils).ServerVersion > 10;
-            var sql = versionGreaterThan10 ? this.ToSql() : this.ToSqlValuesOrSelectUnionAll(false);
-            var before = new Aop.CurdBeforeEventArgs(_table.Type, _table, Aop.CurdType.Insert, sql, _params);
-            _orm.Aop.CurdBeforeHandler?.Invoke(this, before);
-            var affrows = 0;
-            Exception exception = null;
-            try
-            {
-                affrows = _orm.Ado.ExecuteNonQuery(_connection, _transaction, CommandType.Text, sql, _params);
-            }
-            catch (Exception ex)
-            {
-                exception = ex;
-                throw ex;
-            }
-            finally
-            {
-                var after = new Aop.CurdAfterEventArgs(before, exception, affrows);
-                _orm.Aop.CurdAfterHandler?.Invoke(this, after);
-            }
-            return affrows;
+            return this.ToSqlValuesOrSelectUnionAll(versionGreaterThan10);
         }
         protected override long RawExecuteIdentity()
         {
-            var versionGreaterThan10 = (_commonUtils as OdbcSqlServerUtils).ServerVersion > 10;
-            var sql = versionGreaterThan10 ? this.ToSql() : this.ToSqlValuesOrSelectUnionAll(false);
+            var sql = this.ToSql();
             if (string.IsNullOrEmpty(sql)) return 0;
 
             sql = string.Concat(sql, "; SELECT SCOPE_IDENTITY();");
@@ -58,7 +36,7 @@ namespace FreeSql.Odbc.SqlServer
             Exception exception = null;
             try
             {
-                long.TryParse(string.Concat(_orm.Ado.ExecuteScalar(_connection, _transaction, CommandType.Text, sql, _params)), out ret);
+                long.TryParse(string.Concat(_orm.Ado.ExecuteScalar(_connection, _transaction, CommandType.Text, sql, _commandTimeout, _params)), out ret);
             }
             catch (Exception ex)
             {
@@ -74,8 +52,7 @@ namespace FreeSql.Odbc.SqlServer
         }
         protected override List<T1> RawExecuteInserted()
         {
-            var versionGreaterThan10 = (_commonUtils as OdbcSqlServerUtils).ServerVersion > 10;
-            var sql = versionGreaterThan10 ? this.ToSql() : this.ToSqlValuesOrSelectUnionAll(false);
+            var sql = this.ToSql();
             if (string.IsNullOrEmpty(sql)) return new List<T1>();
 
             var sb = new StringBuilder();
@@ -88,7 +65,7 @@ namespace FreeSql.Odbc.SqlServer
                 ++colidx;
             }
 
-            if (versionGreaterThan10)
+            if ((_commonUtils as OdbcSqlServerUtils).ServerVersion > 10)
             {
                 var validx = sql.IndexOf(") VALUES");
                 if (validx == -1) throw new ArgumentException("找不到 VALUES");
@@ -110,7 +87,7 @@ namespace FreeSql.Odbc.SqlServer
             Exception exception = null;
             try
             {
-                ret = _orm.Ado.Query<T1>(_connection, _transaction, CommandType.Text, sql, _params);
+                ret = _orm.Ado.Query<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, _params);
             }
             catch (Exception ex)
             {
@@ -127,38 +104,13 @@ namespace FreeSql.Odbc.SqlServer
 
 #if net40
 #else
-        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(1000, 2100);
-        public override Task<long> ExecuteIdentityAsync() => base.SplitExecuteIdentityAsync(1000, 2100);
-        public override Task<List<T1>> ExecuteInsertedAsync() => base.SplitExecuteInsertedAsync(1000, 2100);
+        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 1000, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
+        public override Task<long> ExecuteIdentityAsync() => base.SplitExecuteIdentityAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 1000, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
+        public override Task<List<T1>> ExecuteInsertedAsync() => base.SplitExecuteInsertedAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 1000, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
 
-        async protected override Task<int> RawExecuteAffrowsAsync()
-        {
-            var versionGreaterThan10 = (_commonUtils as OdbcSqlServerUtils).ServerVersion > 10;
-            var sql = versionGreaterThan10 ? this.ToSql() : this.ToSqlValuesOrSelectUnionAll(false);
-            var before = new Aop.CurdBeforeEventArgs(_table.Type, _table, Aop.CurdType.Insert, sql, _params);
-            _orm.Aop.CurdBeforeHandler?.Invoke(this, before);
-            var affrows = 0;
-            Exception exception = null;
-            try
-            {
-                affrows = await _orm.Ado.ExecuteNonQueryAsync(_connection, _transaction, CommandType.Text, sql, _params);
-            }
-            catch (Exception ex)
-            {
-                exception = ex;
-                throw ex;
-            }
-            finally
-            {
-                var after = new Aop.CurdAfterEventArgs(before, exception, affrows);
-                _orm.Aop.CurdAfterHandler?.Invoke(this, after);
-            }
-            return affrows;
-        }
         async protected override Task<long> RawExecuteIdentityAsync()
         {
-            var versionGreaterThan10 = (_commonUtils as OdbcSqlServerUtils).ServerVersion > 10;
-            var sql = versionGreaterThan10 ? this.ToSql() : this.ToSqlValuesOrSelectUnionAll(false);
+            var sql = this.ToSql();
             if (string.IsNullOrEmpty(sql)) return 0;
 
             sql = string.Concat(sql, "; SELECT SCOPE_IDENTITY();");
@@ -168,7 +120,7 @@ namespace FreeSql.Odbc.SqlServer
             Exception exception = null;
             try
             {
-                long.TryParse(string.Concat(await _orm.Ado.ExecuteScalarAsync(_connection, _transaction, CommandType.Text, sql, _params)), out ret);
+                long.TryParse(string.Concat(await _orm.Ado.ExecuteScalarAsync(_connection, _transaction, CommandType.Text, sql, _commandTimeout, _params)), out ret);
             }
             catch (Exception ex)
             {
@@ -184,8 +136,7 @@ namespace FreeSql.Odbc.SqlServer
         }
         async protected override Task<List<T1>> RawExecuteInsertedAsync()
         {
-            var versionGreaterThan10 = (_commonUtils as OdbcSqlServerUtils).ServerVersion > 10;
-            var sql = versionGreaterThan10 ? this.ToSql() : this.ToSqlValuesOrSelectUnionAll(false);
+            var sql = this.ToSql();
             if (string.IsNullOrEmpty(sql)) return new List<T1>();
 
             var sb = new StringBuilder();
@@ -198,7 +149,7 @@ namespace FreeSql.Odbc.SqlServer
                 ++colidx;
             }
 
-            if (versionGreaterThan10)
+            if ((_commonUtils as OdbcSqlServerUtils).ServerVersion > 10)
             {
                 var validx = sql.IndexOf(") VALUES");
                 if (validx == -1) throw new ArgumentException("找不到 VALUES");
@@ -220,7 +171,7 @@ namespace FreeSql.Odbc.SqlServer
             Exception exception = null;
             try
             {
-                ret = await _orm.Ado.QueryAsync<T1>(_connection, _transaction, CommandType.Text, sql, _params);
+                ret = await _orm.Ado.QueryAsync<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, _params);
             }
             catch (Exception ex)
             {

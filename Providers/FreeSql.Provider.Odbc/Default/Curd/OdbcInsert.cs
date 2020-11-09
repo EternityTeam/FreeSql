@@ -19,9 +19,9 @@ namespace FreeSql.Odbc.Default
             _utils = _commonUtils as OdbcUtils;
         }
 
-        public override int ExecuteAffrows() => base.SplitExecuteAffrows(_utils.Adapter.InsertBatchSplitLimit, 255);
-        public override long ExecuteIdentity() => base.SplitExecuteIdentity(_utils.Adapter.InsertBatchSplitLimit, 255);
-        public override List<T1> ExecuteInserted() => base.SplitExecuteInserted(_utils.Adapter.InsertBatchSplitLimit, 255);
+        public override int ExecuteAffrows() => base.SplitExecuteAffrows(_batchValuesLimit > 0 ? _batchValuesLimit : _utils.Adapter.InsertBatchSplitLimit, _batchParameterLimit > 0 ? _batchParameterLimit : 255);
+        public override long ExecuteIdentity() => base.SplitExecuteIdentity(_batchValuesLimit > 0 ? _batchValuesLimit : _utils.Adapter.InsertBatchSplitLimit, _batchParameterLimit > 0 ? _batchParameterLimit : 255);
+        public override List<T1> ExecuteInserted() => base.SplitExecuteInserted(_batchValuesLimit > 0 ? _batchValuesLimit : _utils.Adapter.InsertBatchSplitLimit, _batchParameterLimit > 0 ? _batchParameterLimit : 255);
 
         protected override long RawExecuteIdentity()
         {
@@ -42,8 +42,8 @@ namespace FreeSql.Odbc.Default
                     poolConn = _orm.Ado.MasterPool.Get();
                     conn = poolConn.Value;
                 }
-                _orm.Ado.ExecuteNonQuery(conn, _transaction, CommandType.Text, sql, _params);
-                ret = long.TryParse(string.Concat(_orm.Ado.ExecuteScalar(conn, _transaction, CommandType.Text, $" {_utils.Adapter.InsertAfterGetIdentitySql}")), out var trylng) ? trylng : 0;
+                _orm.Ado.ExecuteNonQuery(conn, _transaction, CommandType.Text, sql, _commandTimeout, _params);
+                ret = long.TryParse(string.Concat(_orm.Ado.ExecuteScalar(conn, _transaction, CommandType.Text, $" {_utils.Adapter.InsertAfterGetIdentitySql}", _commandTimeout)), out var trylng) ? trylng : 0;
             }
             catch (Exception ex)
             {
@@ -65,10 +65,10 @@ namespace FreeSql.Odbc.Default
 
 #if net40
 #else
-        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(_utils.Adapter.InsertBatchSplitLimit, 255);
-        public override Task<long> ExecuteIdentityAsync() => base.SplitExecuteIdentityAsync(_utils.Adapter.InsertBatchSplitLimit, 255);
-        public override Task<List<T1>> ExecuteInsertedAsync() => base.SplitExecuteInsertedAsync(_utils.Adapter.InsertBatchSplitLimit, 255);
-        
+        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(_batchValuesLimit > 0 ? _batchValuesLimit : _utils.Adapter.InsertBatchSplitLimit, _batchParameterLimit > 0 ? _batchParameterLimit : 255);
+        public override Task<long> ExecuteIdentityAsync() => base.SplitExecuteIdentityAsync(_batchValuesLimit > 0 ? _batchValuesLimit : _utils.Adapter.InsertBatchSplitLimit, _batchParameterLimit > 0 ? _batchParameterLimit : 255);
+        public override Task<List<T1>> ExecuteInsertedAsync() => base.SplitExecuteInsertedAsync(_batchValuesLimit > 0 ? _batchValuesLimit : _utils.Adapter.InsertBatchSplitLimit, _batchParameterLimit > 0 ? _batchParameterLimit : 255);
+
         async protected override Task<long> RawExecuteIdentityAsync()
         {
             var sql = this.ToSql();
@@ -88,8 +88,8 @@ namespace FreeSql.Odbc.Default
                     poolConn = _orm.Ado.MasterPool.Get();
                     conn = poolConn.Value;
                 }
-                await _orm.Ado.ExecuteNonQueryAsync(conn, _transaction, CommandType.Text, sql, _params);
-                ret = long.TryParse(string.Concat(await _orm.Ado.ExecuteScalarAsync(conn, _transaction, CommandType.Text, $" {_utils.Adapter.InsertAfterGetIdentitySql}")), out var trylng) ? trylng : 0;
+                await _orm.Ado.ExecuteNonQueryAsync(conn, _transaction, CommandType.Text, sql, _commandTimeout, _params);
+                ret = long.TryParse(string.Concat(await _orm.Ado.ExecuteScalarAsync(conn, _transaction, CommandType.Text, $" {_utils.Adapter.InsertAfterGetIdentitySql}", _commandTimeout)), out var trylng) ? trylng : 0;
             }
             catch (Exception ex)
             {

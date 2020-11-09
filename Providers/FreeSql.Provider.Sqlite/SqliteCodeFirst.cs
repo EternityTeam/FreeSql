@@ -38,6 +38,7 @@ namespace FreeSql.Sqlite
 
                 { typeof(byte[]).FullName, CsToDb.New(DbType.Binary, "blob", "blob", false, null, new byte[0]) },
                 { typeof(string).FullName, CsToDb.New(DbType.String, "nvarchar", "nvarchar(255)", false, null, "") },
+                { typeof(char).FullName, CsToDb.New(DbType.AnsiString, "char", "char(1)", false, null, '\0') },
 
                 { typeof(Guid).FullName, CsToDb.New(DbType.Guid, "character", "character(36) NOT NULL", false, false, Guid.Empty) },{ typeof(Guid?).FullName, CsToDb.New(DbType.Guid, "character", "character(36)", false, true, null) },
             };
@@ -55,8 +56,8 @@ namespace FreeSql.Sqlite
             if (enumType != null)
             {
                 var newItem = enumType.GetCustomAttributes(typeof(FlagsAttribute), false).Any() ?
-                    CsToDb.New(DbType.Int64, "bigint", $"bigint{(type.IsEnum ? " NOT NULL" : "")}", false, type.IsEnum ? false : true, Enum.GetValues(enumType).GetValue(0)) :
-                    CsToDb.New(DbType.Int32, "mediumint", $"mediumint{(type.IsEnum ? " NOT NULL" : "")}", false, type.IsEnum ? false : true, Enum.GetValues(enumType).GetValue(0));
+                    CsToDb.New(DbType.Int64, "bigint", $"bigint{(type.IsEnum ? " NOT NULL" : "")}", false, type.IsEnum ? false : true, enumType.CreateInstanceGetDefaultValue()) :
+                    CsToDb.New(DbType.Int32, "mediumint", $"mediumint{(type.IsEnum ? " NOT NULL" : "")}", false, type.IsEnum ? false : true, enumType.CreateInstanceGetDefaultValue());
                 if (_dicCsToDb.ContainsKey(type.FullName) == false)
                 {
                     lock (_dicCsToDbLock)
@@ -135,7 +136,7 @@ namespace FreeSql.Sqlite
                         {
                             sb.Append("CREATE ");
                             if (uk.IsUnique) sb.Append("UNIQUE ");
-                            sb.Append("INDEX ").Append(_commonUtils.QuoteSqlName(uk.Name)).Append(" ON ").Append(tbname[1]).Append("(");
+                            sb.Append("INDEX ").Append(_commonUtils.QuoteSqlName(ReplaceIndexName(uk.Name, tbname[1]))).Append(" ON ").Append(tbname[1]).Append("(");
                             foreach (var tbcol in uk.Columns)
                             {
                                 sb.Append(_commonUtils.QuoteSqlName(tbcol.Column.Attribute.Name));
@@ -184,9 +185,10 @@ namespace FreeSql.Sqlite
                 {
                     foreach (var tbcol in tb.ColumnsByPosition)
                     {
+                        if (istmpatler) break;
                         var dbtypeNoneNotNull = Regex.Replace(tbcol.Attribute.DbType, @"NOT\s+NULL", "NULL");
                         if (tbstruct.TryGetValue(tbcol.Attribute.Name, out var tbstructcol) ||
-                        string.IsNullOrEmpty(tbcol.Attribute.OldName) == false && tbstruct.TryGetValue(tbcol.Attribute.OldName, out tbstructcol))
+                            string.IsNullOrEmpty(tbcol.Attribute.OldName) == false && tbstruct.TryGetValue(tbcol.Attribute.OldName, out tbstructcol))
                         {
                             if (tbcol.Attribute.DbType.StartsWith(tbstructcol.sqlType, StringComparison.CurrentCultureIgnoreCase) == false)
                                 istmpatler = true;
@@ -202,6 +204,9 @@ namespace FreeSql.Sqlite
                         //添加列
                         istmpatler = true;
                     }
+                }
+                if (istmpatler == false)
+                {
                     var dsuk = new List<string[]>();
                     var dbIndexes = _orm.Ado.ExecuteArray(CommandType.Text, $"PRAGMA {_commonUtils.QuoteSqlName(tbtmp[0])}.INDEX_LIST(\"{tbtmp[1]}\")");
                     foreach (var dbIndex in dbIndexes)
@@ -219,7 +224,8 @@ namespace FreeSql.Sqlite
                     foreach (var uk in tb.Indexes)
                     {
                         if (string.IsNullOrEmpty(uk.Name) || uk.Columns.Any() == false) continue;
-                        var dsukfind1 = dsuk.Where(a => string.Compare(a[1], uk.Name, true) == 0).ToArray();
+                        var ukname = ReplaceIndexName(uk.Name, tbname[1]);
+                        var dsukfind1 = dsuk.Where(a => string.Compare(a[1], ukname, true) == 0).ToArray();
                         if (dsukfind1.Any() == false || dsukfind1.Length != uk.Columns.Length || dsukfind1.Where(a => (a[3] == "1") == uk.IsUnique && uk.Columns.Where(b => string.Compare(b.Column.Attribute.Name, a[0], true) == 0 && (a[2] == "1") == b.IsDesc).Any()).Count() != uk.Columns.Length)
                             istmpatler = true;
                     }
@@ -286,7 +292,7 @@ namespace FreeSql.Sqlite
                 {
                     sb.Append("CREATE ");
                     if (uk.IsUnique) sb.Append("UNIQUE ");
-                    sb.Append("INDEX ").Append(_commonUtils.QuoteSqlName(uk.Name)).Append(" ON \"").Append(tablenameOnlyTb).Append("\"(");
+                    sb.Append("INDEX ").Append(_commonUtils.QuoteSqlName(ReplaceIndexName(uk.Name, tbname[1]))).Append(" ON \"").Append(tablenameOnlyTb).Append("\"(");
                     foreach (var tbcol in uk.Columns)
                     {
                         sb.Append(_commonUtils.QuoteSqlName(tbcol.Column.Attribute.Name));

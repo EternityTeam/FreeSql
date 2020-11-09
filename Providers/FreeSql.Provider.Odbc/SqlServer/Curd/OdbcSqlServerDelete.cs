@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace FreeSql.Odbc.SqlServer
 {
 
-    class OdbcSqlServerDelete<T1> : Internal.CommonProvider.DeleteProvider<T1> where T1 : class
+    class OdbcSqlServerDelete<T1> : Internal.CommonProvider.DeleteProvider<T1>
     {
         public OdbcSqlServerDelete(IFreeSql orm, CommonUtils commonUtils, CommonExpression commonExpression, object dywhere)
             : base(orm, commonUtils, commonExpression, dywhere)
@@ -43,7 +43,7 @@ namespace FreeSql.Odbc.SqlServer
             Exception exception = null;
             try
             {
-                ret = _orm.Ado.Query<T1>(_connection, _transaction, CommandType.Text, sql, dbParms);
+                ret = _orm.Ado.Query<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
             }
             catch (Exception ex)
             {
@@ -89,7 +89,7 @@ namespace FreeSql.Odbc.SqlServer
             Exception exception = null;
             try
             {
-                ret = await _orm.Ado.QueryAsync<T1>(_connection, _transaction, CommandType.Text, sql, dbParms);
+                ret = await _orm.Ado.QueryAsync<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
             }
             catch (Exception ex)
             {

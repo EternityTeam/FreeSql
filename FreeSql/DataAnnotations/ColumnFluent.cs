@@ -1,16 +1,22 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Reflection;
 
 namespace FreeSql.DataAnnotations
 {
     public class ColumnFluent
     {
 
-        public ColumnFluent(ColumnAttribute column)
+        public ColumnFluent(ColumnAttribute column, PropertyInfo property, Type entityType)
         {
             _column = column;
+            _property = property;
+            _entityType = entityType;
         }
 
-        ColumnAttribute _column;
+        public ColumnAttribute _column;
+        public PropertyInfo _property;
+        public Type _entityType;
         /// <summary>
         /// 数据库列名
         /// </summary>
@@ -168,6 +174,19 @@ namespace FreeSql.DataAnnotations
         public ColumnFluent InsertValueSql(string value)
         {
             _column.InsertValueSql = value;
+            return this;
+        }
+
+        /// <summary>
+        /// decimal/numeric 类型的长度/小数位长度
+        /// </summary>
+        /// <param name="precision">总长度</param>
+        /// <param name="scale">小数位长度</param>
+        /// <returns></returns>
+        public ColumnFluent Precision(int precision, int scale = 0)
+        {
+            _column.Precision = precision;
+            _column.Scale = scale;
             return this;
         }
     }

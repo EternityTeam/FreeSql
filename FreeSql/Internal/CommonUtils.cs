@@ -23,7 +23,7 @@ namespace FreeSql.Internal
     public abstract class CommonUtils
     {
 
-        public abstract string GetNoneParamaterSqlValue(List<DbParameter> specialParams, Type type, object value);
+        public abstract string GetNoneParamaterSqlValue(List<DbParameter> specialParams, string specialParamFlag, ColumnInfo col, Type type, object value);
         public abstract DbParameter AppendParamter(List<DbParameter> _params, string parameterName, ColumnInfo col, Type type, object value);
         public abstract DbParameter[] GetDbParamtersByObject(string sql, object obj);
         public abstract string FormatSql(string sql, params object[] args);
@@ -79,7 +79,7 @@ namespace FreeSql.Internal
             if (entity == null) return _orm.CodeFirst;
             var type = typeof(T);
             var table = dicConfigEntity.GetOrAdd(type, new TableAttribute());
-            var fluent = new TableFluent<T>(CodeFirst, table);
+            var fluent = new TableFluent<T>(table);
             entity.Invoke(fluent);
             Utils.RemoveTableByEntity(type, this); //remove cache
             return _orm.CodeFirst;
@@ -88,7 +88,7 @@ namespace FreeSql.Internal
         {
             if (entity == null) return _orm.CodeFirst;
             var table = dicConfigEntity.GetOrAdd(type, new TableAttribute());
-            var fluent = new TableFluent(CodeFirst, type, table);
+            var fluent = new TableFluent(type, table);
             entity.Invoke(fluent);
             Utils.RemoveTableByEntity(type, this); //remove cache
             return _orm.CodeFirst;
@@ -154,6 +154,8 @@ namespace FreeSql.Internal
                 if (trycol.ServerTime != DateTimeKind.Unspecified) attr.ServerTime = trycol.ServerTime;
                 if (trycol._StringLength != null) attr.StringLength = trycol.StringLength;
                 if (!string.IsNullOrEmpty(trycol.InsertValueSql)) attr.InsertValueSql = trycol.InsertValueSql;
+                if (trycol._Precision != null) attr.Precision = trycol.Precision;
+                if (trycol._Scale != null) attr.Scale = trycol.Scale;
             }
             var attrs = proto.GetCustomAttributes(typeof(ColumnAttribute), false);
             foreach (var tryattrobj in attrs)
@@ -174,7 +176,9 @@ namespace FreeSql.Internal
                 if (tryattr._CanUpdate != null) attr._CanUpdate = tryattr.CanUpdate;
                 if (tryattr.ServerTime != DateTimeKind.Unspecified) attr.ServerTime = tryattr.ServerTime;
                 if (tryattr._StringLength != null) attr.StringLength = tryattr.StringLength;
-                if (!string.IsNullOrEmpty(tryattr.InsertValueSql)) attr.InsertValueSql = tryattr.InsertValueSql;
+                if (!string.IsNullOrEmpty(tryattr.InsertValueSql)) attr.InsertValueSql = tryattr.InsertValueSql; 
+                if (tryattr._Precision != null) attr.Precision = tryattr.Precision;
+                if (tryattr._Scale != null) attr.Scale = tryattr.Scale;
             }
             ColumnAttribute ret = null;
             if (!string.IsNullOrEmpty(attr.Name)) ret = attr;
@@ -192,6 +196,8 @@ namespace FreeSql.Internal
             if (attr.ServerTime != DateTimeKind.Unspecified) ret = attr;
             if (attr._StringLength != null) ret = attr;
             if (!string.IsNullOrEmpty(attr.InsertValueSql)) ret = attr;
+            if (attr._Precision != null) ret = attr;
+            if (attr._Scale != null) ret = attr;
             if (ret != null && ret.MapType == null) ret.MapType = proto.PropertyType;
             return ret;
         }
@@ -261,7 +267,7 @@ namespace FreeSql.Internal
             var pk1 = primarys.FirstOrDefault();
             if (primarys.Length == 1 && (type == pk1.CsType || type.IsNumberType() && pk1.CsType.IsNumberType()))
             {
-                return $"{aliasAndDot}{this.QuoteSqlName(pk1.Attribute.Name)} = {this.FormatSql("{0}", Utils.GetDataReaderValue(pk1.Attribute.MapType, dywhere))}";
+                return $"{aliasAndDot}{this.QuoteSqlName(pk1.Attribute.Name)} = {GetNoneParamaterSqlValue(null, null, pk1, pk1.Attribute.MapType, Utils.GetDataReaderValue(pk1.Attribute.MapType, dywhere))}";
             }
             else if (primarys.Length > 0 && (type == table.Type || type.BaseType == table.Type))
             {
@@ -270,10 +276,39 @@ namespace FreeSql.Internal
                 foreach (var pk in primarys)
                 {
                     if (pkidx > 0) sb.Append(" AND ");
-                    sb.Append(aliasAndDot).Append(this.QuoteSqlName(pk.Attribute.Name));
-                    sb.Append(this.FormatSql(" = {0}", pk.GetMapValue(dywhere)));
+                    sb.Append(aliasAndDot).Append(this.QuoteSqlName(pk.Attribute.Name)).Append(" = ");
+                    sb.Append(GetNoneParamaterSqlValue(null, null, pk, pk.Attribute.MapType, pk.GetDbValue(dywhere)));
                     ++pkidx;
                 }
+                return sb.ToString();
+            }
+            else if (primarys.Length == 1 && type == typeof(string))
+            {
+                return $"{aliasAndDot}{this.QuoteSqlName(pk1.Attribute.Name)} = {GetNoneParamaterSqlValue(null, null, pk1, pk1.Attribute.MapType, Utils.GetDataReaderValue(pk1.Attribute.MapType, dywhere))}";
+            }
+            else if (primarys.Length == 1 && dywhere is IEnumerable)
+            {
+                var sb = new StringBuilder();
+                var ie = dywhere as IEnumerable;
+                var ieidx = 0;
+                var isEntityType = false;
+                var isAny = false;
+                sb.Append(aliasAndDot).Append(this.QuoteSqlName(pk1.Attribute.Name)).Append(" IN ("); //or会造成扫全表
+                foreach (var i in ie)
+                {
+                    isAny = true;
+                    if (ieidx > 0) sb.Append(",");
+                    if (ieidx == 0)
+                    {
+                        var itype = i.GetType();
+                        isEntityType = (itype == table.Type || itype.BaseType == table.Type);
+                    }
+                    if (isEntityType) sb.Append(GetNoneParamaterSqlValue(null, null, primarys[0], primarys[0].Attribute.MapType, primarys[0].GetDbValue(i)));
+                    else sb.Append(GetNoneParamaterSqlValue(null, null, pk1, pk1.Attribute.MapType, Utils.GetDataReaderValue(pk1.Attribute.MapType, i)));
+                    ++ieidx;
+                }
+                if (isAny == false) return "";
+                sb.Append(")");
                 return sb.ToString();
             }
             else if (dywhere is IEnumerable)
@@ -298,10 +333,13 @@ namespace FreeSql.Internal
                 var psidx = 0;
                 foreach (var p in ps)
                 {
-                    if (table.Columns.TryGetValue(p.Name, out var trycol) == false) continue;
+                    table.Columns.TryGetValue(p.Name, out var trycol);
+                    if (trycol == null) table.ColumnsByCs.TryGetValue(p.Name, out trycol);
+                    if (trycol == null) continue;
+
                     if (psidx > 0) sb.Append(" AND ");
-                    sb.Append(aliasAndDot).Append(this.QuoteSqlName(trycol.Attribute.Name));
-                    sb.Append(this.FormatSql(" = {0}", Utils.GetDataReaderValue(trycol.Attribute.MapType, p.GetValue(dywhere, null))));
+                    sb.Append(aliasAndDot).Append(this.QuoteSqlName(trycol.Attribute.Name)).Append(" = ");
+                    sb.Append(GetNoneParamaterSqlValue(null, null, trycol, trycol.Attribute.MapType, Utils.GetDataReaderValue(trycol.Attribute.MapType, p.GetValue(dywhere, null))));
                     ++psidx;
                 }
                 if (psidx == 0) return "";
@@ -320,10 +358,10 @@ namespace FreeSql.Internal
             {
                 var sbin = new StringBuilder();
                 sbin.Append(aliasAndDot).Append(this.QuoteSqlName(pk1.Attribute.Name));
-                var indt = its.Select(a => pk1.GetMapValue(a)).Where(a => a != null).ToArray();
+                var indt = its.Select(a => pk1.GetDbValue(a)).Where(a => a != null).ToArray();
                 if (indt.Any() == false) return null;
-                if (indt.Length == 1) sbin.Append(" = ").Append(this.FormatSql("{0}", indt.First()));
-                else sbin.Append(" IN (").Append(string.Join(",", indt.Select(a => this.FormatSql("{0}", a)))).Append(")");
+                if (indt.Length == 1) sbin.Append(" = ").Append(GetNoneParamaterSqlValue(null, null, pk1, pk1.Attribute.MapType, indt.First()));
+                else sbin.Append(" IN (").Append(string.Join(",", indt.Select(a => GetNoneParamaterSqlValue(null, null, pk1, pk1.Attribute.MapType, a)))).Append(")");
                 return sbin.ToString();
             }
             var dicpk = its.Length > 5 ? new Dictionary<string, bool>() : null;
@@ -333,7 +371,7 @@ namespace FreeSql.Internal
             {
                 var filter = "";
                 foreach (var pk in table.Primarys)
-                    filter += $" AND {aliasAndDot}{this.QuoteSqlName(pk.Attribute.Name)} = {this.FormatSql("{0}", pk.GetMapValue(item))}";
+                    filter += $" AND {aliasAndDot}{this.QuoteSqlName(pk.Attribute.Name)} = {GetNoneParamaterSqlValue(null, null, pk, pk.Attribute.MapType, pk.GetDbValue(item))}";
                 if (string.IsNullOrEmpty(filter)) continue;
                 if (sb != null)
                 {
@@ -368,52 +406,117 @@ namespace FreeSql.Internal
         }
 
         /// <summary>
+        /// 动态读取 DescriptionAttribute 注释文本
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
+        public static Dictionary<string, string> GetPropertyCommentByDescriptionAttribute(Type type)
+        {
+            var dic = new Dictionary<string, string>();
+            GetDydesc(null); //class注释
+
+            var props = type.GetPropertiesDictIgnoreCase().Values;
+            foreach (var prop in props)
+                GetDydesc(prop);
+
+            return dic;
+
+            void GetDydesc(PropertyInfo prop)
+            {
+                object[] attrs = null;
+                try
+                {
+                    attrs = prop == null ? 
+                        type.GetCustomAttributes(false).ToArray() : 
+                        prop.GetCustomAttributes(false).ToArray(); //.net core 反射存在版本冲突问题，导致该方法异常
+                }
+                catch { }
+
+                var dyattr = attrs?.Where(a => {
+                    return ((a as Attribute)?.TypeId as Type)?.Name == "DescriptionAttribute";
+                }).FirstOrDefault();
+                if (dyattr != null)
+                {
+                    var valueProp = dyattr.GetType().GetProperties().Where(a => a.PropertyType == typeof(string)).FirstOrDefault();
+                    var comment = valueProp?.GetValue(dyattr, null)?.ToString();
+                    if (string.IsNullOrEmpty(comment) == false)
+                        dic.Add(prop == null ? 
+                            "" : 
+                            prop.Name, comment);
+                }
+            }
+        }
+
+        /// <summary>
         /// 通过属性的注释文本，通过 xml 读取
         /// </summary>
         /// <param name="type"></param>
         /// <returns>Dict：key=属性名，value=注释</returns>
         public static Dictionary<string, string> GetProperyCommentBySummary(Type type)
         {
-            var regex = new Regex(@"\.(dll|exe)", RegexOptions.IgnoreCase);
-            var xmlPath = regex.Replace(type.Assembly.Location, ".xml");
-            if (File.Exists(xmlPath) == false)
+            return LocalGetComment(type, 0);
+
+            Dictionary<string, string> LocalGetComment(Type localType, int level)
             {
-                if (string.IsNullOrEmpty(type.Assembly.CodeBase)) return null;
-                xmlPath = regex.Replace(type.Assembly.CodeBase, ".xml");
-                if (xmlPath.StartsWith("file:///") && Uri.TryCreate(xmlPath, UriKind.Absolute, out var tryuri))
-                    xmlPath = tryuri.LocalPath;
-                if (File.Exists(xmlPath) == false) return null;
+                if (localType.Assembly.IsDynamic) return null;
+                //动态生成的程序集，访问不了 Assembly.Location/Assembly.CodeBase
+                var regex = new Regex(@"\.(dll|exe)", RegexOptions.IgnoreCase);
+                var xmlPath = regex.Replace(localType.Assembly.Location, ".xml");
+                if (File.Exists(xmlPath) == false)
+                {
+                    if (string.IsNullOrEmpty(localType.Assembly.CodeBase)) return null;
+                    xmlPath = regex.Replace(localType.Assembly.CodeBase, ".xml");
+                    if (xmlPath.StartsWith("file:///") && Uri.TryCreate(xmlPath, UriKind.Absolute, out var tryuri))
+                        xmlPath = tryuri.LocalPath;
+                    if (File.Exists(xmlPath) == false) return null;
+                }
+
+                var dic = new Dictionary<string, string>();
+                var sReader = new StringReader(File.ReadAllText(xmlPath));
+                using (var xmlReader = XmlReader.Create(sReader))
+                {
+                    XPathDocument xpath = null;
+                    try
+                    {
+                        xpath = new XPathDocument(xmlReader);
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                    var xmlNav = xpath.CreateNavigator();
+
+                    var className = (localType.IsNested ? $"{localType.Namespace}.{localType.DeclaringType.Name}.{localType.Name}" : $"{localType.Namespace}.{localType.Name}").Trim('.');
+                    var node = xmlNav.SelectSingleNode($"/doc/members/member[@name='T:{className}']/summary");
+                    if (node != null)
+                    {
+                        var comment = node.InnerXml.Trim(' ', '\r', '\n', '\t');
+                        if (string.IsNullOrEmpty(comment) == false) dic.Add("", comment); //class注释
+                    }
+
+                    var props = localType.GetPropertiesDictIgnoreCase().Values;
+                    foreach (var prop in props)
+                    {
+                        className = (prop.DeclaringType.IsNested ? $"{prop.DeclaringType.Namespace}.{prop.DeclaringType.DeclaringType.Name}.{prop.DeclaringType.Name}" : $"{prop.DeclaringType.Namespace}.{prop.DeclaringType.Name}").Trim('.');
+                        node = xmlNav.SelectSingleNode($"/doc/members/member[@name='P:{className}.{prop.Name}']/summary");
+                        if (node == null)
+                        {
+                            if (level == 0 && prop.DeclaringType.Assembly != localType.Assembly)
+                            {
+                                var cbs = LocalGetComment(prop.DeclaringType, level + 1);
+                                if (cbs != null && cbs.TryGetValue(prop.Name, out var otherComment) && string.IsNullOrEmpty(otherComment) == false)
+                                    dic.Add(prop.Name, otherComment);
+                            }
+                            continue;
+                        }
+                        var comment = node.InnerXml.Trim(' ', '\r', '\n', '\t');
+                        if (string.IsNullOrEmpty(comment)) continue;
+
+                        dic.Add(prop.Name, comment);
+                    }
+                }
+                return dic;
             }
-
-            var dic = new Dictionary<string, string>();
-            var sReader = new StringReader(File.ReadAllText(xmlPath));
-            using (var xmlReader = XmlReader.Create(sReader))
-            {
-                XPathDocument xpath = null;
-                try
-                {
-                    xpath = new XPathDocument(xmlReader);
-                }
-                catch
-                {
-                    return null;
-                }
-                var xmlNav = xpath.CreateNavigator();
-
-                var props = type.GetPropertiesDictIgnoreCase().Values;
-                foreach (var prop in props)
-                {
-                    var className = (prop.DeclaringType.IsNested ? $"{prop.DeclaringType.Namespace}.{prop.DeclaringType.DeclaringType.Name}.{prop.DeclaringType.Name}" : $"{prop.DeclaringType.Namespace}.{prop.DeclaringType.Name}").Trim('.');
-                    var node = xmlNav.SelectSingleNode($"/doc/members/member[@name='P:{className}.{prop.Name}']/summary");
-                    if (node == null) continue;
-                    var comment = node.InnerXml.Trim(' ', '\r', '\n', '\t');
-                    if (string.IsNullOrEmpty(comment)) continue;
-
-                    dic.Add(prop.Name, comment);
-                }
-            }
-
-            return dic;
         }
 
         public static void PrevReheatConnectionPool(ObjectPool<DbConnection> pool, int minPoolSize)

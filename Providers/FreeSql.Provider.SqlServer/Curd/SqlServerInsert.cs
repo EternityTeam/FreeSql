@@ -1,10 +1,8 @@
 ﻿using FreeSql.Internal;
-using FreeSql.Internal.ObjectPool;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -43,7 +41,7 @@ namespace FreeSql.SqlServer.Curd
             Exception exception = null;
             try
             {
-                long.TryParse(string.Concat(_orm.Ado.ExecuteScalar(_connection, _transaction, CommandType.Text, sql, _params)), out ret);
+                long.TryParse(string.Concat(_orm.Ado.ExecuteScalar(_connection, _transaction, CommandType.Text, sql, _commandTimeout, _params)), out ret);
             }
             catch (Exception ex)
             {
@@ -94,7 +92,7 @@ namespace FreeSql.SqlServer.Curd
             Exception exception = null;
             try
             {
-                ret = _orm.Ado.Query<T1>(_connection, _transaction, CommandType.Text, sql, _params);
+                ret = _orm.Ado.Query<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, _params);
             }
             catch (Exception ex)
             {
@@ -111,9 +109,9 @@ namespace FreeSql.SqlServer.Curd
 
 #if net40
 #else
-        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(1000, 2100);
-        public override Task<long> ExecuteIdentityAsync() => base.SplitExecuteIdentityAsync(1000, 2100);
-        public override Task<List<T1>> ExecuteInsertedAsync() => base.SplitExecuteInsertedAsync(1000, 2100);
+        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 1000, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
+        public override Task<long> ExecuteIdentityAsync() => base.SplitExecuteIdentityAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 1000, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
+        public override Task<List<T1>> ExecuteInsertedAsync() => base.SplitExecuteInsertedAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 1000, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
 
         async protected override Task<long> RawExecuteIdentityAsync()
         {
@@ -127,7 +125,7 @@ namespace FreeSql.SqlServer.Curd
             Exception exception = null;
             try
             {
-                long.TryParse(string.Concat(await _orm.Ado.ExecuteScalarAsync(_connection, _transaction, CommandType.Text, sql, _params)), out ret);
+                long.TryParse(string.Concat(await _orm.Ado.ExecuteScalarAsync(_connection, _transaction, CommandType.Text, sql, _commandTimeout, _params)), out ret);
             }
             catch (Exception ex)
             {
@@ -178,7 +176,7 @@ namespace FreeSql.SqlServer.Curd
             Exception exception = null;
             try
             {
-                ret = await _orm.Ado.QueryAsync<T1>(_connection, _transaction, CommandType.Text, sql, _params);
+                ret = await _orm.Ado.QueryAsync<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, _params);
             }
             catch (Exception ex)
             {

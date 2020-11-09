@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace FreeSql.Odbc.SqlServer
 {
 
-    class OdbcSqlServerUpdate<T1> : Internal.CommonProvider.UpdateProvider<T1> where T1 : class
+    class OdbcSqlServerUpdate<T1> : Internal.CommonProvider.UpdateProvider<T1>
     {
 
         public OdbcSqlServerUpdate(IFreeSql orm, CommonUtils commonUtils, CommonExpression commonExpression, object dywhere)
@@ -49,8 +49,8 @@ namespace FreeSql.Odbc.SqlServer
             Exception exception = null;
             try
             {
-                ret = _orm.Ado.Query<T1>(_connection, _transaction, CommandType.Text, sql, dbParms);
-                ValidateVersionAndThrow(ret.Count);
+                ret = _orm.Ado.Query<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
+                ValidateVersionAndThrow(ret.Count, sql, dbParms);
             }
             catch (Exception ex)
             {
@@ -88,22 +88,22 @@ namespace FreeSql.Odbc.SqlServer
         {
             if (_table.Primarys.Length == 1)
             {
-                sb.Append(_commonUtils.FormatSql("{0}", _table.Primarys.First().GetMapValue(d)));
+                sb.Append(_commonUtils.FormatSql("{0}", _table.Primarys[0].GetDbValue(d)));
                 return;
             }
             var pkidx = 0;
             foreach (var pk in _table.Primarys)
             {
                 if (pkidx > 0) sb.Append(" + '+' + ");
-                sb.Append("cast(").Append(_commonUtils.FormatSql("{0}", pk.GetMapValue(d))).Append(" as varchar)");
+                sb.Append("cast(").Append(_commonUtils.FormatSql("{0}", pk.GetDbValue(d))).Append(" as varchar)");
                 ++pkidx;
             }
         }
 
 #if net40
 #else
-        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(500, 2100);
-        public override Task<List<T1>> ExecuteUpdatedAsync() => base.SplitExecuteUpdatedAsync(500, 2100);
+        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(_batchRowsLimit > 0 ? _batchRowsLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
+        public override Task<List<T1>> ExecuteUpdatedAsync() => base.SplitExecuteUpdatedAsync(_batchRowsLimit > 0 ? _batchRowsLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 2100);
 
         async protected override Task<List<T1>> RawExecuteUpdatedAsync()
         {
@@ -133,8 +133,8 @@ namespace FreeSql.Odbc.SqlServer
             Exception exception = null;
             try
             {
-                ret = await _orm.Ado.QueryAsync<T1>(_connection, _transaction, CommandType.Text, sql, dbParms);
-                ValidateVersionAndThrow(ret.Count);
+                ret = await _orm.Ado.QueryAsync<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
+                ValidateVersionAndThrow(ret.Count, sql, dbParms);
             }
             catch (Exception ex)
             {

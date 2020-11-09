@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace FreeSql.Odbc.MySql
 {
 
-    class OdbcMySqlUpdate<T1> : Internal.CommonProvider.UpdateProvider<T1> where T1 : class
+    class OdbcMySqlUpdate<T1> : Internal.CommonProvider.UpdateProvider<T1>
     {
 
         public OdbcMySqlUpdate(IFreeSql orm, CommonUtils commonUtils, CommonExpression commonExpression, object dywhere)
@@ -18,9 +18,15 @@ namespace FreeSql.Odbc.MySql
         {
         }
 
+        internal StringBuilder InternalSbSet => _set;
+        internal StringBuilder InternalSbSetIncr => _setIncr;
+        internal Dictionary<string, bool> InternalIgnore => _ignore;
+        internal void InternalResetSource(List<T1> source) => _source = source;
+        internal string InternalWhereCaseSource(string CsName, Func<string, string> thenValue) => WhereCaseSource(CsName, thenValue);
+        internal void InternalToSqlCaseWhenEnd(StringBuilder sb, ColumnInfo col) => ToSqlCaseWhenEnd(sb, col);
+
         public override int ExecuteAffrows() => base.SplitExecuteAffrows(_batchRowsLimit > 0 ? _batchRowsLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 3000);
         public override List<T1> ExecuteUpdated() => base.SplitExecuteUpdated(_batchRowsLimit > 0 ? _batchRowsLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 3000);
-
 
         protected override List<T1> RawExecuteUpdated()
         {
@@ -45,8 +51,8 @@ namespace FreeSql.Odbc.MySql
             Exception exception = null;
             try
             {
-                ret = _orm.Ado.Query<T1>(_connection, _transaction, CommandType.Text, sql, dbParms);
-                ValidateVersionAndThrow(ret.Count);
+                ret = _orm.Ado.Query<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
+                ValidateVersionAndThrow(ret.Count, sql, dbParms);
             }
             catch (Exception ex)
             {
@@ -84,7 +90,7 @@ namespace FreeSql.Odbc.MySql
         {
             if (_table.Primarys.Length == 1)
             {
-                sb.Append(_commonUtils.FormatSql("{0}", _table.Primarys.First().GetMapValue(d)));
+                sb.Append(_commonUtils.FormatSql("{0}", _table.Primarys[0].GetDbValue(d)));
                 return;
             }
             sb.Append("CONCAT(");
@@ -92,7 +98,7 @@ namespace FreeSql.Odbc.MySql
             foreach (var pk in _table.Primarys)
             {
                 if (pkidx > 0) sb.Append(", '+', ");
-                sb.Append(_commonUtils.FormatSql("{0}", pk.GetMapValue(d)));
+                sb.Append(_commonUtils.FormatSql("{0}", pk.GetDbValue(d)));
                 ++pkidx;
             }
             sb.Append(")");
@@ -100,8 +106,8 @@ namespace FreeSql.Odbc.MySql
 
 #if net40
 #else
-        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(500, 3000);
-        public override Task<List<T1>> ExecuteUpdatedAsync() => base.SplitExecuteUpdatedAsync(500, 3000);
+        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(_batchRowsLimit > 0 ? _batchRowsLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 3000);
+        public override Task<List<T1>> ExecuteUpdatedAsync() => base.SplitExecuteUpdatedAsync(_batchRowsLimit > 0 ? _batchRowsLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 3000);
 
         async protected override Task<List<T1>> RawExecuteUpdatedAsync()
         {
@@ -126,8 +132,8 @@ namespace FreeSql.Odbc.MySql
             Exception exception = null;
             try
             {
-                ret = await _orm.Ado.QueryAsync<T1>(_connection, _transaction, CommandType.Text, sql, dbParms);
-                ValidateVersionAndThrow(ret.Count);
+                ret = await _orm.Ado.QueryAsync<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
+                ValidateVersionAndThrow(ret.Count, sql, dbParms);
             }
             catch (Exception ex)
             {

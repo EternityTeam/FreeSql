@@ -9,6 +9,7 @@ using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace FreeSql.Internal.CommonProvider
@@ -16,10 +17,9 @@ namespace FreeSql.Internal.CommonProvider
 
     public abstract partial class CodeFirstProvider : ICodeFirst
     {
-
-        protected IFreeSql _orm;
-        protected CommonUtils _commonUtils;
-        protected CommonExpression _commonExpression;
+        public IFreeSql _orm;
+        public CommonUtils _commonUtils;
+        public CommonExpression _commonExpression;
         public CodeFirstProvider(IFreeSql orm, CommonUtils commonUtils, CommonExpression commonExpression)
         {
             _orm = orm;
@@ -69,7 +69,7 @@ namespace FreeSql.Internal.CommonProvider
 
         static object syncStructureLock = new object();
         object _dicSycedLock = new object();
-        ConcurrentDictionary<Type, ConcurrentDictionary<string, bool>> _dicSynced = new ConcurrentDictionary<Type, ConcurrentDictionary<string, bool>>();
+        public ConcurrentDictionary<Type, ConcurrentDictionary<string, bool>> _dicSynced = new ConcurrentDictionary<Type, ConcurrentDictionary<string, bool>>();
         internal ConcurrentDictionary<string, bool> _dicSycedGetOrAdd(Type entityType)
         {
             if (_dicSynced.TryGetValue(entityType, out var trydic) == false)
@@ -78,21 +78,25 @@ namespace FreeSql.Internal.CommonProvider
                         _dicSynced.TryAdd(entityType, trydic = new ConcurrentDictionary<string, bool>());
             return trydic;
         }
-        internal void _dicSycedTryAdd(Type entityType, string tableName = null) =>
+        public void _dicSycedTryAdd(Type entityType, string tableName = null) =>
             _dicSycedGetOrAdd(entityType).TryAdd(GetTableNameLowerOrUpper(tableName), true);
 
-        public bool SyncStructure<TEntity>() =>
+        public void SyncStructure<TEntity>() =>
             this.SyncStructure(new TypeAndName(typeof(TEntity), ""));
-        public bool SyncStructure(params Type[] entityTypes) => entityTypes == null ? false :
-            this.SyncStructure(entityTypes.Distinct().Select(a => new TypeAndName(a, "")).ToArray());
-        public bool SyncStructure(Type entityType, string tableName) =>
-           this.SyncStructure(new TypeAndName(entityType, GetTableNameLowerOrUpper(tableName)));
-        protected bool SyncStructure(params TypeAndName[] objects)
+        public void SyncStructure(params Type[] entityTypes) => 
+            this.SyncStructure(entityTypes?.Distinct().Select(a => new TypeAndName(a, "")).ToArray());
+        public void SyncStructure(Type entityType, string tableName, bool isForceSync)
         {
-            if (objects == null) return false;
-            var syncObjects = objects.Where(a => _dicSycedGetOrAdd(a.entityType).ContainsKey(GetTableNameLowerOrUpper(a.tableName)) == false && GetTableByEntity(a.entityType)?.DisableSyncStructure == false)
+            tableName = GetTableNameLowerOrUpper(tableName);
+            if (isForceSync && _dicSynced.TryGetValue(entityType, out var dic)) dic.TryRemove(tableName, out var old);
+            this.SyncStructure(new TypeAndName(entityType, tableName));
+        }
+        protected void SyncStructure(params TypeAndName[] objects)
+        {
+            if (objects == null) return;
+            var syncObjects = objects.Where(a => a.entityType != typeof(object) && _dicSycedGetOrAdd(a.entityType).ContainsKey(GetTableNameLowerOrUpper(a.tableName)) == false && GetTableByEntity(a.entityType)?.DisableSyncStructure == false)
                 .Select(a => new TypeAndName(a.entityType, GetTableNameLowerOrUpper(a.tableName))).ToArray();
-            if (syncObjects.Any() == false) return false;
+            if (syncObjects.Any() == false) return;
             var before = new Aop.SyncStructureBeforeEventArgs(syncObjects.Select(a => a.entityType).ToArray());
             _orm.Aop.SyncStructureBeforeHandler?.Invoke(this, before);
             Exception exception = null;
@@ -105,11 +109,11 @@ namespace FreeSql.Internal.CommonProvider
                     if (string.IsNullOrEmpty(ddl))
                     {
                         foreach (var syncObject in syncObjects) _dicSycedTryAdd(syncObject.entityType, syncObject.tableName);
-                        return true;
+                        return;
                     }
                     var affrows = ExecuteDDLStatements(ddl);
                     foreach (var syncObject in syncObjects) _dicSycedTryAdd(syncObject.entityType, syncObject.tableName);
-                    return true;
+                    return;
                 }
             }
             catch (Exception ex)
@@ -125,5 +129,7 @@ namespace FreeSql.Internal.CommonProvider
         }
 
         public virtual int ExecuteDDLStatements(string ddl) => _orm.Ado.ExecuteNonQuery(CommandType.Text, ddl);
+
+        public static string ReplaceIndexName(string indexName, string tbname) => string.IsNullOrEmpty(indexName) ? indexName : Regex.Replace(indexName, @"\{\s*TableName\s*\}", tbname, RegexOptions.IgnoreCase);
     }
 }

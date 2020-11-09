@@ -26,9 +26,9 @@ namespace FreeSql.Tests.Odbc.Default
         public void Dywhere()
         {
             Assert.Null(g.odbc.Update<Topic>().ToSql());
-            Assert.Equal("UPDATE [tb_topic] SET title='test' \r\nWHERE ([Id] = 1 OR [Id] = 2)", g.odbc.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").ToSql());
+            Assert.Equal("UPDATE [tb_topic] SET title='test' \r\nWHERE ([Id] IN (1,2))", g.odbc.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").ToSql());
             Assert.Equal("UPDATE [tb_topic] SET title='test1' \r\nWHERE ([Id] = 1)", g.odbc.Update<Topic>(new Topic { Id = 1, Title = "test" }).SetRaw("title='test1'").ToSql());
-            Assert.Equal("UPDATE [tb_topic] SET title='test1' \r\nWHERE ([Id] = 1 OR [Id] = 2)", g.odbc.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").ToSql());
+            Assert.Equal("UPDATE [tb_topic] SET title='test1' \r\nWHERE ([Id] IN (1,2))", g.odbc.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").ToSql());
             Assert.Equal("UPDATE [tb_topic] SET title='test1' \r\nWHERE ([Id] = 1)", g.odbc.Update<Topic>(new { id = 1 }).SetRaw("title='test1'").ToSql());
         }
 
@@ -63,6 +63,20 @@ namespace FreeSql.Tests.Odbc.Default
             [Column(IsPrimary = true)]
             public int id2 { get; set; }
             public string xx { get; set; }
+        }
+        [Fact]
+        public void SetSourceIgnore()
+        {
+            Assert.Equal("UPDATE [tssi01] SET [tint] = 10 WHERE ([id] = '00000000-0000-0000-0000-000000000000')",
+                g.odbc.Update<tssi01>().NoneParameter()
+                    .SetSourceIgnore(new tssi01 { id = Guid.Empty, tint = 10 }, col => col == null).ToSql().Replace("\r\n", ""));
+        }
+        public class tssi01
+        {
+            [Column(CanUpdate = false)]
+            public Guid id { get; set; }
+            public int tint { get; set; }
+            public string title { get; set; }
         }
         [Fact]
         public void IgnoreColumns()
@@ -107,6 +121,9 @@ namespace FreeSql.Tests.Odbc.Default
 
             sql = update.Set(a => a.Id == 10).Where(a => a.Id == 1).ToSql().Replace("\r\n", "");
             Assert.Equal("UPDATE [tb_topic] SET [Id] = 10 WHERE ([Id] = 1)", sql);
+
+            sql = update.Set(a => a.Clicks == null).Where(a => a.Id == 1).ToSql().Replace("\r\n", "");
+            Assert.Equal("UPDATE [tb_topic] SET [Clicks] = NULL WHERE ([Id] = 1)", sql);
         }
         [Fact]
         public void SetRaw()
@@ -158,9 +175,9 @@ namespace FreeSql.Tests.Odbc.Default
         public void AsTable()
         {
             Assert.Null(g.odbc.Update<Topic>().ToSql());
-            Assert.Equal("UPDATE [tb_topicAsTable] SET title='test' \r\nWHERE ([Id] = 1 OR [Id] = 2)", g.odbc.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").AsTable(a => "tb_topicAsTable").ToSql());
+            Assert.Equal("UPDATE [tb_topicAsTable] SET title='test' \r\nWHERE ([Id] IN (1,2))", g.odbc.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").AsTable(a => "tb_topicAsTable").ToSql());
             Assert.Equal("UPDATE [tb_topicAsTable] SET title='test1' \r\nWHERE ([Id] = 1)", g.odbc.Update<Topic>(new Topic { Id = 1, Title = "test" }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
-            Assert.Equal("UPDATE [tb_topicAsTable] SET title='test1' \r\nWHERE ([Id] = 1 OR [Id] = 2)", g.odbc.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
+            Assert.Equal("UPDATE [tb_topicAsTable] SET title='test1' \r\nWHERE ([Id] IN (1,2))", g.odbc.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
             Assert.Equal("UPDATE [tb_topicAsTable] SET title='test1' \r\nWHERE ([Id] = 1)", g.odbc.Update<Topic>(new { id = 1 }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
         }
     }

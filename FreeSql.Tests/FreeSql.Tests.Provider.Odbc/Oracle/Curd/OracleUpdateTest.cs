@@ -24,9 +24,9 @@ namespace FreeSql.Tests.Odbc.Oracle
         public void Dywhere()
         {
             Assert.Null(g.oracle.Update<Topic>().ToSql());
-            Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test' \r\nWHERE (\"ID\" = 1 OR \"ID\" = 2)", g.oracle.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").ToSql());
+            Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test' \r\nWHERE (\"ID\" IN (1,2))", g.oracle.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").ToSql());
             Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test1' \r\nWHERE (\"ID\" = 1)", g.oracle.Update<Topic>(new Topic { Id = 1, Title = "test" }).SetRaw("title='test1'").ToSql());
-            Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test1' \r\nWHERE (\"ID\" = 1 OR \"ID\" = 2)", g.oracle.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").ToSql());
+            Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test1' \r\nWHERE (\"ID\" IN (1,2))", g.oracle.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").ToSql());
             Assert.Equal("UPDATE \"TB_TOPIC\" SET title='test1' \r\nWHERE (\"ID\" = 1)", g.oracle.Update<Topic>(new { id = 1 }).SetRaw("title='test1'").ToSql());
         }
 
@@ -53,6 +53,17 @@ namespace FreeSql.Tests.Odbc.Oracle
                 new ts_source_mpk { id1 = 1, id2 = 7, xx = "a1" },
                 new ts_source_mpk { id1 = 1, id2 = 8, xx = "b122" }
             }).NoneParameter().ToSql().Replace("\r\n", "");
+
+            var uuids = new[]
+            {
+                new tssi01{tint = 1, title = "title01"},
+                new tssi01{tint = 2, title = "title02"},
+                new tssi01{tint = 3, title = "title03"},
+            };
+            g.oracle.Insert(uuids).ExecuteAffrows();
+            g.oracle.Update<tssi01>().SetSource(uuids).ExecuteAffrows();
+
+            var tssi01tb = g.oracle.DbFirst.GetTableByName("tssi01");
         }
         public class ts_source_mpk
         {
@@ -61,6 +72,20 @@ namespace FreeSql.Tests.Odbc.Oracle
             [Column(IsPrimary = true)]
             public int id2 { get; set; }
             public string xx { get; set; }
+        }
+        [Fact]
+        public void SetSourceIgnore()
+        {
+            Assert.Equal("UPDATE \"TSSI01\" SET \"TINT\" = 10 WHERE (\"ID\" = '00000000-0000-0000-0000-000000000000')",
+                g.oracle.Update<tssi01>().NoneParameter()
+                    .SetSourceIgnore(new tssi01 { id = Guid.Empty, tint = 10 }, col => col == null).ToSql().Replace("\r\n", ""));
+        }
+        public class tssi01
+        {
+            [Column(CanUpdate = false, DbType = "nvarchar2(36)")]
+            public Guid id { get; set; }
+            public int tint { get; set; }
+            public string title { get; set; }
         }
         [Fact]
         public void IgnoreColumns()
@@ -105,6 +130,9 @@ namespace FreeSql.Tests.Odbc.Oracle
 
             sql = update.Set(a => a.Id == 10).Where(a => a.Id == 1).ToSql().Replace("\r\n", "");
             Assert.Equal("UPDATE \"TB_TOPIC\" SET \"ID\" = 10 WHERE (\"ID\" = 1)", sql);
+
+            sql = update.Set(a => a.Clicks == null).Where(a => a.Id == 1).ToSql().Replace("\r\n", "");
+            Assert.Equal("UPDATE \"TB_TOPIC\" SET \"CLICKS\" = NULL WHERE (\"ID\" = 1)", sql);
         }
         [Fact]
         public void SetRaw()
@@ -154,9 +182,9 @@ namespace FreeSql.Tests.Odbc.Oracle
         public void AsTable()
         {
             Assert.Null(g.oracle.Update<Topic>().ToSql());
-            Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test' \r\nWHERE (\"ID\" = 1 OR \"ID\" = 2)", g.oracle.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").AsTable(a => "tb_topicAsTable").ToSql());
+            Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test' \r\nWHERE (\"ID\" IN (1,2))", g.oracle.Update<Topic>(new[] { 1, 2 }).SetRaw("title='test'").AsTable(a => "tb_topicAsTable").ToSql());
             Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test1' \r\nWHERE (\"ID\" = 1)", g.oracle.Update<Topic>(new Topic { Id = 1, Title = "test" }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
-            Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test1' \r\nWHERE (\"ID\" = 1 OR \"ID\" = 2)", g.oracle.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
+            Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test1' \r\nWHERE (\"ID\" IN (1,2))", g.oracle.Update<Topic>(new[] { new Topic { Id = 1, Title = "test" }, new Topic { Id = 2, Title = "test" } }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
             Assert.Equal("UPDATE \"TB_TOPICASTABLE\" SET title='test1' \r\nWHERE (\"ID\" = 1)", g.oracle.Update<Topic>(new { id = 1 }).SetRaw("title='test1'").AsTable(a => "tb_topicAsTable").ToSql());
         }
     }

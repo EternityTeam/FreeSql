@@ -20,9 +20,9 @@ namespace System.Linq.Expressions
             if (exp1 == null) return exp2;
             if (exp2 == null) return exp1;
 
-            var newParameters = exp1.Parameters.Select((a, b) => Expression.Parameter(a.Type, $"new{b}")).ToArray();
+            var newParameters = exp1.Parameters.Select((a, b) => Expression.Parameter(a.Type, a.Name /*$"new{b}"*/)).ToArray();
 
-            var left = new NewExpressionVisitor(newParameters, exp2.Parameters.ToArray()).Replace(exp1.Body);
+            var left = new NewExpressionVisitor(newParameters, exp1.Parameters.ToArray()).Replace(exp1.Body);
             var right = new NewExpressionVisitor(newParameters, exp2.Parameters.ToArray()).Replace(exp2.Body);
             var body = isAndAlso ? Expression.AndAlso(left, right) : Expression.OrElse(left, right);
             return Expression.Lambda(exp1.Type, body, newParameters);
@@ -32,7 +32,7 @@ namespace System.Linq.Expressions
             if (condition == false) return exp;
             if (exp == null) return null;
 
-            var newParameters = exp.Parameters.Select((a, b) => Expression.Parameter(a.Type, $"new{b}")).ToArray();
+            var newParameters = exp.Parameters.Select((a, b) => Expression.Parameter(a.Type, a.Name /*$"new{b}"*/)).ToArray();
             var body = Expression.Not(exp.Body);
             return Expression.Lambda(exp.Type, body, newParameters);
         }
@@ -232,6 +232,31 @@ namespace System.Linq.Expressions
             var test = new TestParameterExpressionVisitor();
             test.Visit(exp);
             return test.Result;
+        }
+
+        static ConcurrentDictionary<Type, ConcurrentDictionary<string, MethodInfo>> _dicTypeMethod = new ConcurrentDictionary<Type, ConcurrentDictionary<string, MethodInfo>>();
+        public static bool IsStringJoin(this MethodCallExpression exp, out Expression tolistObjectExpOut, out MethodInfo toListMethodOut, out LambdaExpression toListArgs0Out)
+        {
+            if (exp.Arguments.Count == 2 &&
+                exp.Arguments[1].NodeType == ExpressionType.Call &&
+                exp.Arguments[1].Type.FullName.StartsWith("System.Collections.Generic.List`1") &&
+                exp.Arguments[1] is MethodCallExpression toListMethod &&
+                toListMethod.Method.Name == "ToList" &&
+                toListMethod.Arguments.Count == 1 &&
+                toListMethod.Arguments[0] is UnaryExpression joinExpArgs1Args0Tmp &&
+                joinExpArgs1Args0Tmp.Operand is LambdaExpression toListArgs0)
+            {
+                tolistObjectExpOut = toListMethod.Object;
+                toListMethodOut = toListMethod.Type.GetGenericArguments().FirstOrDefault() == typeof(string) ?
+                    toListMethod.Method :
+                    toListMethod.Method.GetGenericMethodDefinition().MakeGenericMethod(typeof(string));
+                toListArgs0Out = toListArgs0;
+                return true;
+            }
+            tolistObjectExpOut = null;
+            toListMethodOut = null;
+            toListArgs0Out = null;
+            return false;
         }
     }
 

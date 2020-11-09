@@ -1,14 +1,11 @@
 ﻿using FreeSql.Aop;
-using FreeSql.Internal;
 using FreeSql.Internal.Model;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace FreeSql.PostgreSQL.Curd
@@ -27,6 +24,7 @@ namespace FreeSql.PostgreSQL.Curd
         {
             _pgsqlInsert = insert as PostgreSQLInsert<T1>;
             if (_pgsqlInsert == null) throw new Exception("OnConflictDoUpdate 是 FreeSql.Provider.PostgreSQL 特有的功能");
+            if (_pgsqlInsert._noneParameterFlag == "c") _pgsqlInsert._noneParameterFlag = "cu";
 
             if (columns != null)
             {
@@ -161,7 +159,7 @@ namespace FreeSql.PostgreSQL.Curd
             Exception exception = null;
             try
             {
-                ret = _pgsqlInsert.InternalOrm.Ado.ExecuteNonQuery(_pgsqlInsert.InternalConnection, _pgsqlInsert.InternalTransaction, CommandType.Text, sql, _pgsqlInsert.InternalParams);
+                ret = _pgsqlInsert.InternalOrm.Ado.ExecuteNonQuery(_pgsqlInsert.InternalConnection, _pgsqlInsert.InternalTransaction, CommandType.Text, sql, _pgsqlInsert._commandTimeout, _pgsqlInsert.InternalParams);
             }
             catch (Exception ex)
             {
@@ -190,7 +188,7 @@ namespace FreeSql.PostgreSQL.Curd
             Exception exception = null;
             try
             {
-                ret = await _pgsqlInsert.InternalOrm.Ado.ExecuteNonQueryAsync(_pgsqlInsert.InternalConnection, _pgsqlInsert.InternalTransaction, CommandType.Text, sql, _pgsqlInsert.InternalParams);
+                ret = await _pgsqlInsert.InternalOrm.Ado.ExecuteNonQueryAsync(_pgsqlInsert.InternalConnection, _pgsqlInsert.InternalTransaction, CommandType.Text, sql, _pgsqlInsert._commandTimeout, _pgsqlInsert.InternalParams);
             }
             catch (Exception ex)
             {

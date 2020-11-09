@@ -42,12 +42,14 @@ namespace dbcontext_01.Controllers
                 repos2Song.Where(a => a.Id > 10).ToList();
                 //查询结果，进入 states
 
-                var song = new Song { };
+                var song = new Song { Title = "empty" };
                 repos2Song.Insert(song);
+                song.Title = "empty01";
+                repos2Song.Update(song);
                 id = song.Id;
 
                 var adds = Enumerable.Range(0, 100)
-                    .Select(a => new Song { Create_time = DateTime.Now, Is_deleted = false, Title = "xxxx" + a, Url = "url222" })
+                    .Select(a => new Song { CreateTime = DateTime.Now, Title = "xxxx" + a, Url = "url222" })
                     .ToList();
                 //创建一堆无主键值
 
@@ -72,17 +74,7 @@ namespace dbcontext_01.Controllers
                 var ctx = _songContext;
                 var tag = new Tag
                 {
-                    Name = "testaddsublist",
-                    Tags = new[] {
-                            new Tag { Name = "sub1" },
-                            new Tag { Name = "sub2" },
-                            new Tag {
-                                Name = "sub3",
-                                Tags = new[] {
-                                    new Tag { Name = "sub3_01" }
-                                }
-                            }
-                        }
+                    Name = "testaddsublist"
                 };
                 ctx.Tags.Add(tag);
 
@@ -91,17 +83,7 @@ namespace dbcontext_01.Controllers
 
                 var tagAsync = new Tag
                 {
-                    Name = "testaddsublist",
-                    Tags = new[] {
-                            new Tag { Name = "sub1" },
-                            new Tag { Name = "sub2" },
-                            new Tag {
-                                Name = "sub3",
-                                Tags = new[] {
-                                    new Tag { Name = "sub3_01" }
-                                }
-                            }
-                        }
+                    Name = "testaddsublist"
                 };
                 await ctx.Tags.AddAsync(tagAsync);
 
@@ -109,7 +91,7 @@ namespace dbcontext_01.Controllers
                 ctx.Songs.Select.Where(a => a.Id > 10).ToList();
                 //查询结果，进入 states
 
-                song = new Song { };
+                song = new Song { Title = "empty" };
                 //可插入的 song
 
                 ctx.Songs.Add(song);
@@ -117,7 +99,7 @@ namespace dbcontext_01.Controllers
                 //因有自增类型，立即开启事务执行SQL，返回自增值
 
                 adds = Enumerable.Range(0, 100)
-                    .Select(a => new Song { Create_time = DateTime.Now, Is_deleted = false, Title = "xxxx" + a, Url = "url222" })
+                    .Select(a => new Song { CreateTime = DateTime.Now, Title = "xxxx" + a, Url = "url222" })
                     .ToList();
                 //创建一堆无主键值
 
@@ -159,12 +141,12 @@ namespace dbcontext_01.Controllers
                     reposSong.Where(a => a.Id > 10).ToList();
                     //查询结果，进入 states
 
-                    song = new Song { };
+                    song = new Song { Title = "empty" };
                     reposSong.Insert(song);
                     id = song.Id;
 
                     adds = Enumerable.Range(0, 100)
-                        .Select(a => new Song { Create_time = DateTime.Now, Is_deleted = false, Title = "xxxx" + a, Url = "url222" })
+                        .Select(a => new Song { CreateTime = DateTime.Now, Title = "xxxx" + a, Url = "url222" })
                         .ToList();
                     //创建一堆无主键值
 
@@ -193,12 +175,12 @@ namespace dbcontext_01.Controllers
                 using (ctx = new SongContext())
                 {
 
-                    song = new Song { };
+                    song = new Song { Title = "empty" };
                     await ctx.Songs.AddAsync(song);
                     id = song.Id;
 
                     adds = Enumerable.Range(0, 100)
-                        .Select(a => new Song { Create_time = DateTime.Now, Is_deleted = false, Title = "xxxx" + a, Url = "url222" })
+                        .Select(a => new Song { CreateTime = DateTime.Now, Title = "xxxx" + a, Url = "url222" })
                         .ToList();
                     await ctx.Songs.AddRangeAsync(adds);
 

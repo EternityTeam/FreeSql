@@ -14,10 +14,10 @@ namespace FreeSql
 {
     partial class DbSet<TEntity>
     {
-        Task DbContextExecCommandAsync()
+        Task DbContextFlushCommandAsync()
         {
             _dicUpdateTimes.Clear();
-            return _db.ExecCommandAsync();
+            return _db.FlushCommandAsync();
         }
 
         async Task<int> DbContextBatchAddAsync(EntityState[] adds)
@@ -35,18 +35,22 @@ namespace FreeSql
             if (_tableIdentitys.Length > 0)
             {
                 //有自增，马上执行
-                switch (_db.Orm.Ado.DataType)
+                switch (_db.OrmOriginal.Ado.DataType)
                 {
                     case DataType.SqlServer:
                     case DataType.OdbcSqlServer:
                     case DataType.PostgreSQL:
                     case DataType.OdbcPostgreSQL:
-                        if (_tableIdentitys.Length == 1 && _table.Primarys.Length == 1)
+                    case DataType.KingbaseES:
+                    case DataType.OdbcKingbaseES:
+                    case DataType.ShenTong:
+                    case DataType.Firebird: //firebird 只支持单条插入 returning
+                        if (_tableIdentitys.Length == 1)
                         {
-                            await DbContextExecCommandAsync();
+                            await DbContextFlushCommandAsync();
                             var idtval = await this.OrmInsert(data).ExecuteIdentityAsync();
                             IncrAffrows(1);
-                            _db.Orm.SetEntityIdentityValueWithPrimary(_entityType, data, idtval);
+                            _db.OrmOriginal.SetEntityIdentityValueWithPrimary(_entityType, data, idtval);
                             _db._entityChangeReport.Add(new DbContext.EntityChangeReport.ChangeInfo { Object = data, Type = DbContext.EntityChangeType.Insert });
                             Attach(data);
                             if (_db.Options.EnableAddOrUpdateNavigateList)
@@ -54,23 +58,23 @@ namespace FreeSql
                         }
                         else
                         {
-                            await DbContextExecCommandAsync();
+                            await DbContextFlushCommandAsync();
                             var newval = (await this.OrmInsert(data).ExecuteInsertedAsync()).First();
                             _db._entityChangeReport.Add(new DbContext.EntityChangeReport.ChangeInfo { Object = newval, Type = DbContext.EntityChangeType.Insert });
                             IncrAffrows(1);
-                            _db.Orm.MapEntityValue(_entityType, newval, data);
+                            _db.OrmOriginal.MapEntityValue(_entityType, newval, data);
                             Attach(newval);
                             if (_db.Options.EnableAddOrUpdateNavigateList)
                                 await AddOrUpdateNavigateListAsync(data, true);
                         }
                         return;
                     default:
-                        if (_tableIdentitys.Length == 1 && _table.Primarys.Length == 1)
+                        if (_tableIdentitys.Length == 1)
                         {
-                            await DbContextExecCommandAsync();
+                            await DbContextFlushCommandAsync();
                             var idtval = await this.OrmInsert(data).ExecuteIdentityAsync();
                             IncrAffrows(1);
-                            _db.Orm.SetEntityIdentityValueWithPrimary(_entityType, data, idtval);
+                            _db.OrmOriginal.SetEntityIdentityValueWithPrimary(_entityType, data, idtval);
                             _db._entityChangeReport.Add(new DbContext.EntityChangeReport.ChangeInfo { Object = data, Type = DbContext.EntityChangeType.Insert });
                             Attach(data);
                             if (_db.Options.EnableAddOrUpdateNavigateList)
@@ -96,19 +100,22 @@ namespace FreeSql
             if (_tableIdentitys.Length > 0)
             {
                 //有自增，马上执行
-                switch (_db.Orm.Ado.DataType)
+                switch (_db.OrmOriginal.Ado.DataType)
                 {
                     case DataType.SqlServer:
                     case DataType.OdbcSqlServer:
                     case DataType.PostgreSQL:
                     case DataType.OdbcPostgreSQL:
-                        await DbContextExecCommandAsync();
+                    case DataType.KingbaseES:
+                    case DataType.OdbcKingbaseES:
+                    case DataType.ShenTong:
+                        await DbContextFlushCommandAsync();
                         var rets = await this.OrmInsert(data).ExecuteInsertedAsync();
-                        if (rets.Count != data.Count()) throw new Exception($"特别错误：批量添加失败，{_db.Orm.Ado.DataType} 的返回数据，与添加的数目不匹配");
+                        if (rets.Count != data.Count()) throw new Exception($"特别错误：批量添加失败，{_db.OrmOriginal.Ado.DataType} 的返回数据，与添加的数目不匹配");
                         _db._entityChangeReport.AddRange(rets.Select(a => new DbContext.EntityChangeReport.ChangeInfo { Object = a, Type = DbContext.EntityChangeType.Insert }));
                         var idx = 0;
                         foreach (var s in data)
-                            _db.Orm.MapEntityValue(_entityType, rets[idx++], s);
+                            _db.OrmOriginal.MapEntityValue(_entityType, rets[idx++], s);
                         IncrAffrows(rets.Count);
                         AttachRange(rets);
                         if (_db.Options.EnableAddOrUpdateNavigateList)
@@ -149,7 +156,7 @@ namespace FreeSql
                     throw new ArgumentException($"{_table.Type.FullName} 类型的属性 {propertyName} 不是 OneToMany 或 ManyToMany 特性");
             }
 
-            await DbContextExecCommandAsync();
+            await DbContextFlushCommandAsync();
             var oldEnable = _db.Options.EnableAddOrUpdateNavigateList;
             _db.Options.EnableAddOrUpdateNavigateList = false;
             try
@@ -157,7 +164,7 @@ namespace FreeSql
                 await AddOrUpdateNavigateListAsync(item, false, propertyName);
                 if (tref.RefType == Internal.Model.TableRefType.OneToMany)
                 {
-                    await DbContextExecCommandAsync();
+                    await DbContextFlushCommandAsync();
                     //删除没有保存的数据，求出主体的条件
                     var deleteWhereParentParam = Expression.Parameter(typeof(object), "a");
                     Expression whereParentExp = null;
@@ -168,13 +175,13 @@ namespace FreeSql
                             Expression.Constant(
                                 FreeSql.Internal.Utils.GetDataReaderValue(
                                     tref.Columns[colidx].CsType,
-                                    _db.Orm.GetEntityValueWithPropertyName(_table.Type, item, tref.Columns[colidx].CsName)), tref.RefColumns[colidx].CsType)
+                                    _db.OrmOriginal.GetEntityValueWithPropertyName(_table.Type, item, tref.Columns[colidx].CsName)), tref.RefColumns[colidx].CsType)
                             );
                         if (whereParentExp == null) whereParentExp = whereExp;
                         else whereParentExp = Expression.AndAlso(whereParentExp, whereExp);
                     }
                     var propValEach = GetItemValue(item, prop) as IEnumerable;
-                    var subDelete = _db.Orm.Delete<object>().AsType(tref.RefEntityType)
+                    var subDelete = _db.OrmOriginal.Delete<object>().AsType(tref.RefEntityType)
                         .WithTransaction(_uow?.GetOrBeginTransaction())
                         .Where(Expression.Lambda<Func<object, bool>>(whereParentExp, deleteWhereParentParam));
                     foreach (var propValItem in propValEach)
@@ -230,12 +237,12 @@ namespace FreeSql
                                 Expression.Constant(
                                     FreeSql.Internal.Utils.GetDataReaderValue(
                                         tref.MiddleColumns[colidx].CsType,
-                                        _db.Orm.GetEntityValueWithPropertyName(_table.Type, item, tref.Columns[colidx].CsName)), tref.MiddleColumns[colidx].CsType)
+                                        _db.OrmOriginal.GetEntityValueWithPropertyName(_table.Type, item, tref.Columns[colidx].CsName)), tref.MiddleColumns[colidx].CsType)
                                 ), midSelectParam));
 
                         if (curList.Any() == false) //全部删除
                         {
-                            var delall = _db.Orm.Delete<object>().AsType(tref.RefMiddleEntityType)
+                            var delall = _db.OrmOriginal.Delete<object>().AsType(tref.RefMiddleEntityType)
                                 .WithTransaction(_uow?.GetOrBeginTransaction());
                             foreach (var midWhere in midWheres) delall.Where(midWhere);
                             var sql = delall.ToSql();
@@ -266,8 +273,8 @@ namespace FreeSql
                                     for (var midcolidx = tref.Columns.Count; midcolidx < tref.MiddleColumns.Count; midcolidx++)
                                     {
                                         var refcol = tref.Columns[midcolidx - tref.Columns.Count];
-                                        var midval = FreeSql.Internal.Utils.GetDataReaderValue(refcol.CsType, _db.Orm.GetEntityValueWithPropertyName(tref.RefMiddleEntityType, midItem, tref.MiddleColumns[midcolidx].CsName));
-                                        var refval = FreeSql.Internal.Utils.GetDataReaderValue(refcol.CsType, _db.Orm.GetEntityValueWithPropertyName(tref.RefEntityType, curList[curIdx], tref.Columns[midcolidx - tref.Columns.Count].CsName));
+                                        var midval = FreeSql.Internal.Utils.GetDataReaderValue(refcol.CsType, _db.OrmOriginal.GetEntityValueWithPropertyName(tref.RefMiddleEntityType, midItem, tref.MiddleColumns[midcolidx].CsName));
+                                        var refval = FreeSql.Internal.Utils.GetDataReaderValue(refcol.CsType, _db.OrmOriginal.GetEntityValueWithPropertyName(tref.RefEntityType, curList[curIdx], tref.Columns[midcolidx - tref.Columns.Count].CsName));
                                         if (object.Equals(midval, refval) == false)
                                         {
                                             isEquals = false;
@@ -289,14 +296,14 @@ namespace FreeSql
                                 var newItem = Activator.CreateInstance(tref.RefMiddleEntityType);
                                 for (var colidx = 0; colidx < tref.Columns.Count; colidx++)
                                 {
-                                    var val = FreeSql.Internal.Utils.GetDataReaderValue(tref.MiddleColumns[colidx].CsType, _db.Orm.GetEntityValueWithPropertyName(_table.Type, item, tref.Columns[colidx].CsName));
-                                    _db.Orm.SetEntityValueWithPropertyName(tref.RefMiddleEntityType, newItem, tref.MiddleColumns[colidx].CsName, val);
+                                    var val = FreeSql.Internal.Utils.GetDataReaderValue(tref.MiddleColumns[colidx].CsType, _db.OrmOriginal.GetEntityValueWithPropertyName(_table.Type, item, tref.Columns[colidx].CsName));
+                                    _db.OrmOriginal.SetEntityValueWithPropertyName(tref.RefMiddleEntityType, newItem, tref.MiddleColumns[colidx].CsName, val);
                                 }
                                 for (var midcolidx = tref.Columns.Count; midcolidx < tref.MiddleColumns.Count; midcolidx++)
                                 {
                                     var refcol = tref.RefColumns[midcolidx - tref.Columns.Count];
-                                    var refval = FreeSql.Internal.Utils.GetDataReaderValue(tref.MiddleColumns[midcolidx].CsType, _db.Orm.GetEntityValueWithPropertyName(tref.RefEntityType, curItem, refcol.CsName));
-                                    _db.Orm.SetEntityValueWithPropertyName(tref.RefMiddleEntityType, newItem, tref.MiddleColumns[midcolidx].CsName, refval);
+                                    var refval = FreeSql.Internal.Utils.GetDataReaderValue(tref.MiddleColumns[midcolidx].CsType, _db.OrmOriginal.GetEntityValueWithPropertyName(tref.RefEntityType, curItem, refcol.CsName));
+                                    _db.OrmOriginal.SetEntityValueWithPropertyName(tref.RefMiddleEntityType, newItem, tref.MiddleColumns[midcolidx].CsName, refval);
                                 }
                                 midListAdd.Add(newItem);
                             }
@@ -308,8 +315,8 @@ namespace FreeSql
                         {
                             for (var colidx = 0; colidx < tref.Columns.Count; colidx++)
                             {
-                                var val = FreeSql.Internal.Utils.GetDataReaderValue(tref.RefColumns[colidx].CsType, _db.Orm.GetEntityValueWithPropertyName(_table.Type, item, tref.Columns[colidx].CsName));
-                                _db.Orm.SetEntityValueWithPropertyName(tref.RefEntityType, propValItem, tref.RefColumns[colidx].CsName, val);
+                                var val = FreeSql.Internal.Utils.GetDataReaderValue(tref.RefColumns[colidx].CsType, _db.OrmOriginal.GetEntityValueWithPropertyName(_table.Type, item, tref.Columns[colidx].CsName));
+                                _db.OrmOriginal.SetEntityValueWithPropertyName(tref.RefEntityType, propValItem, tref.RefColumns[colidx].CsName, val);
                             }
                             await refSet.AddOrUpdateAsync(propValItem);
                         }
@@ -336,10 +343,10 @@ namespace FreeSql
 
             if (_states.TryGetValue(uplst1.Key, out var lstval1) == false) return -999;
             var lstval2 = default(EntityState);
-            if (uplst2 != null && _states.TryGetValue(uplst2.Key, out lstval2) == false) throw new Exception($"特别错误：更新失败，数据未被跟踪：{_db.Orm.GetEntityString(_entityType, uplst2.Value)}");
+            if (uplst2 != null && _states.TryGetValue(uplst2.Key, out lstval2) == false) throw new Exception($"特别错误：更新失败，数据未被跟踪：{_db.OrmOriginal.GetEntityString(_entityType, uplst2.Value)}");
 
-            var cuig1 = _db.Orm.CompareEntityValueReturnColumns(_entityType, uplst1.Value, lstval1.Value, true);
-            var cuig2 = uplst2 != null ? _db.Orm.CompareEntityValueReturnColumns(_entityType, uplst2.Value, lstval2.Value, true) : null;
+            var cuig1 = _db.OrmOriginal.CompareEntityValueReturnColumns(_entityType, uplst1.Value, lstval1.Value, true);
+            var cuig2 = uplst2 != null ? _db.OrmOriginal.CompareEntityValueReturnColumns(_entityType, uplst2.Value, lstval2.Value, true) : null;
 
             List<EntityState> data = null;
             string[] cuig = null;
@@ -359,22 +366,23 @@ namespace FreeSql
 
             if (data?.Count > 0)
             {
-
                 if (cuig.Length == _table.Columns.Count)
                     return ups.Length == data.Count ? -998 : -997;
 
-                var updateSource = data.Select(a => a.Value).ToArray();
-                var update = this.OrmUpdate(null).SetSource(updateSource).IgnoreColumns(cuig);
-
+                var update = this.OrmUpdate(null).SetSource(data.Select(a => a.Value)).IgnoreColumns(cuig);
                 var affrows = await update.ExecuteAffrowsAsync();
-                _db._entityChangeReport.AddRange(updateSource.Select(a => new DbContext.EntityChangeReport.ChangeInfo { Object = a, Type = DbContext.EntityChangeType.Update }));
+                _db._entityChangeReport.AddRange(data.Select(a => new DbContext.EntityChangeReport.ChangeInfo { 
+                    Object = a.Value, 
+                    BeforeObject = _states.TryGetValue(a.Key, out var beforeVal) ? CreateEntityState(beforeVal.Value).Value : null, 
+                    Type = DbContext.EntityChangeType.Update 
+                }));
 
                 foreach (var newval in data)
                 {
                     if (_states.TryGetValue(newval.Key, out var tryold))
-                        _db.Orm.MapEntityValue(_entityType, newval.Value, tryold.Value);
+                        _db.OrmOriginal.MapEntityValue(_entityType, newval.Value, tryold.Value);
                     if (newval.OldValue != null)
-                        _db.Orm.MapEntityValue(_entityType, newval.Value, newval.OldValue);
+                        _db.OrmOriginal.MapEntityValue(_entityType, newval.Value, newval.OldValue);
                 }
                 return affrows;
             }
@@ -385,11 +393,11 @@ namespace FreeSql
         async public Task UpdateAsync(TEntity data)
         {
             var exists = ExistsInStates(data);
-            if (exists == null) throw new Exception($"不可更新，未设置主键的值：{_db.Orm.GetEntityString(_entityType, data)}");
+            if (exists == null) throw new Exception($"不可更新，未设置主键的值：{_db.OrmOriginal.GetEntityString(_entityType, data)}");
             if (exists == false)
             {
                 var olddata = await OrmSelect(data).FirstAsync();
-                if (olddata == null) throw new Exception($"不可更新，数据库不存在该记录：{_db.Orm.GetEntityString(_entityType, data)}");
+                if (olddata == null) throw new Exception($"不可更新，数据库不存在该记录：{_db.OrmOriginal.GetEntityString(_entityType, data)}");
             }
 
             await UpdateRangePrivAsync(new[] { data }, true);
@@ -401,7 +409,18 @@ namespace FreeSql
             foreach (var item in data)
             {
                 if (_dicUpdateTimes.ContainsKey(item))
-                    await DbContextExecCommandAsync();
+                {
+                    var itemCopy = CreateEntityState(item).Value;
+                    await DbContextFlushCommandAsync();
+                    if (_table.VersionColumn != null)
+                    {
+                        var itemVersion = _db.OrmOriginal.GetEntityValueWithPropertyName(_entityType, item, _table.VersionColumn.CsName);
+                        _db.OrmOriginal.MapEntityValue(_entityType, itemCopy, item);
+                        _db.OrmOriginal.SetEntityValueWithPropertyName(_entityType, item, _table.VersionColumn.CsName, itemVersion);
+                    }
+                    else
+                        _db.OrmOriginal.MapEntityValue(_entityType, itemCopy, item);
+                }
                 _dicUpdateTimes.Add(item, 1);
 
                 var state = CreateEntityState(item);
@@ -420,7 +439,7 @@ namespace FreeSql
             if (dels.Any() == false) return 0;
             var affrows = await this.OrmDelete(dels.Select(a => a.Value)).ExecuteAffrowsAsync();
             _db._entityChangeReport.AddRange(dels.Select(a => new DbContext.EntityChangeReport.ChangeInfo { Object = a.Value, Type = DbContext.EntityChangeType.Delete }));
-            return Math.Max(dels.Length, affrows);
+            return affrows;
         }
         /// <summary>
         /// 根据 lambda 条件删除数据
@@ -429,7 +448,7 @@ namespace FreeSql
         /// <returns></returns>
         async public Task<int> RemoveAsync(Expression<Func<TEntity, bool>> predicate)
         {
-            await DbContextExecCommandAsync();
+            await DbContextFlushCommandAsync();
             return await this.OrmDelete(null).Where(predicate).ExecuteAffrowsAsync();
         }
         #endregion
@@ -438,7 +457,7 @@ namespace FreeSql
         async public Task AddOrUpdateAsync(TEntity data)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
-            if (_table.Primarys.Any() == false) throw new Exception($"不可添加，实体没有主键：{_db.Orm.GetEntityString(_entityType, data)}");
+            if (_table.Primarys.Any() == false) throw new Exception($"不可添加，实体没有主键：{_db.OrmOriginal.GetEntityString(_entityType, data)}");
 
             var flagExists = ExistsInStates(data);
             if (flagExists == false)
@@ -449,16 +468,16 @@ namespace FreeSql
 
             if (flagExists == true && CanUpdate(data, false))
             {
-                await DbContextExecCommandAsync();
+                await DbContextFlushCommandAsync();
                 var affrows = _db._affrows;
                 await UpdateRangePrivAsync(new[] { data }, false);
-                await DbContextExecCommandAsync();
+                await DbContextFlushCommandAsync();
                 affrows = _db._affrows - affrows;
                 if (affrows > 0) return;
             }
             if (CanAdd(data, false))
             {
-                _db.Orm.ClearEntityPrimaryValueWithIdentity(_entityType, data);
+                _db.OrmOriginal.ClearEntityPrimaryValueWithIdentity(_entityType, data);
                 await AddPrivAsync(data, false);
             }
         }

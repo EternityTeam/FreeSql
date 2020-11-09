@@ -66,9 +66,10 @@ namespace FreeSql.Odbc.Oracle
                         sb.Append(col.DbInsertValue);
                     else
                     {
-                        object val = col.GetMapValue(d);
+                        object val = col.GetDbValue(d);
+                        if (val == null && col.Attribute.IsNullable == false) val = col.CsType == typeof(string) ? "" : Utils.GetDataReaderValue(col.CsType.NullableTypeOrThis(), null);//#384
                         if (_noneParameter)
-                            sb.Append(_commonUtils.GetNoneParamaterSqlValue(specialParams, col.Attribute.MapType, val));
+                            sb.Append(_commonUtils.GetNoneParamaterSqlValue(specialParams, _noneParameterFlag, col, col.Attribute.MapType, val));
                         else
                         {
                             sb.Append(_commonUtils.QuoteWriteParamter(col.Attribute.MapType, _commonUtils.QuoteParamterName($"{col.CsName}_{didx}")));
@@ -80,6 +81,7 @@ namespace FreeSql.Odbc.Oracle
                 sb.Append(")");
                 ++didx;
             }
+            if (_noneParameter && specialParams.Any()) _params = specialParams.ToArray();
             if (_source.Count > 1) sb.Append("\r\n SELECT 1 FROM DUAL");
             return sb.ToString();
         }
@@ -100,7 +102,7 @@ namespace FreeSql.Odbc.Oracle
                 _orm.Aop.CurdBeforeHandler?.Invoke(this, before);
                 try
                 {
-                    ret = _orm.Ado.ExecuteNonQuery(_connection, _transaction, CommandType.Text, sql, _params);
+                    ret = _orm.Ado.ExecuteNonQuery(_connection, _transaction, CommandType.Text, sql, _commandTimeout, _params);
                 }
                 catch (Exception ex)
                 {
@@ -123,7 +125,7 @@ namespace FreeSql.Odbc.Oracle
             _orm.Aop.CurdBeforeHandler?.Invoke(this, before);
             try
             {
-                _orm.Ado.ExecuteNonQuery(_connection, _transaction, CommandType.Text, sql, dbParms);
+                _orm.Ado.ExecuteNonQuery(_connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
                 long.TryParse(string.Concat(identParam.Value), out ret);
             }
             catch (Exception ex)
@@ -151,9 +153,9 @@ namespace FreeSql.Odbc.Oracle
 
 #if net40
 #else
-        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(500, 999);
-        public override Task<long> ExecuteIdentityAsync() => base.SplitExecuteIdentityAsync(500, 999);
-        public override Task<List<T1>> ExecuteInsertedAsync() => base.SplitExecuteInsertedAsync(500, 999);
+        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 999);
+        public override Task<long> ExecuteIdentityAsync() => base.SplitExecuteIdentityAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 999);
+        public override Task<List<T1>> ExecuteInsertedAsync() => base.SplitExecuteInsertedAsync(_batchValuesLimit > 0 ? _batchValuesLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 999);
 
         async protected override Task<long> RawExecuteIdentityAsync()
         {
@@ -170,7 +172,7 @@ namespace FreeSql.Odbc.Oracle
                 _orm.Aop.CurdBeforeHandler?.Invoke(this, before);
                 try
                 {
-                    ret = await _orm.Ado.ExecuteNonQueryAsync(_connection, _transaction, CommandType.Text, sql, _params);
+                    ret = await _orm.Ado.ExecuteNonQueryAsync(_connection, _transaction, CommandType.Text, sql, _commandTimeout, _params);
                 }
                 catch (Exception ex)
                 {
@@ -193,7 +195,7 @@ namespace FreeSql.Odbc.Oracle
             _orm.Aop.CurdBeforeHandler?.Invoke(this, before);
             try
             {
-                await _orm.Ado.ExecuteNonQueryAsync(_connection, _transaction, CommandType.Text, sql, dbParms);
+                await _orm.Ado.ExecuteNonQueryAsync(_connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
                 long.TryParse(string.Concat(identParam.Value), out ret);
             }
             catch (Exception ex)

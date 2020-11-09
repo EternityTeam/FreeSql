@@ -29,6 +29,13 @@ namespace FreeSql.Tests
 
             item = repos.Find(item.Id);
             Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(item));
+
+            repos.Orm.Insert(new AddUpdateInfo()).ExecuteAffrows();
+            repos.Orm.Insert(new AddUpdateInfo { Id = Guid.NewGuid() }).ExecuteAffrows();
+            repos.Orm.Update<AddUpdateInfo>().Set(a => a.Title == "xxx").Where(a => a.Id == item.Id).ExecuteAffrows();
+            item = repos.Orm.Select<AddUpdateInfo>(item).First();
+            Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(item));
+            repos.Orm.Delete<AddUpdateInfo>(item).ExecuteAffrows();
         }
 
         [Fact]
@@ -122,89 +129,9 @@ namespace FreeSql.Tests
                 {
                     flowRepos = uow.GetRepository<FlowModel>();
                     flowRepos.Insert(flow);
+                    flowRepos.Orm.Select<FlowModel>().ToList();
                     uow.Commit();
                 }
-            }
-        }
-
-        [Fact]
-        public void UnitOfWorkRepositoryWithDisableBeforeInsert()
-        {
-            foreach (var fsql in new[] { g.sqlite, })
-            {
-                fsql.CodeFirst.ConfigEntity<FlowModel>(f =>
-                {
-                    f.Property(b => b.UserId).IsPrimary(true);
-                    f.Property(b => b.Id).IsPrimary(true).IsIdentity(true);
-                    f.Property(b => b.Name).IsNullable(false);
-                });
-
-                var flowRepos = fsql.GetRepository<FlowModel>();
-
-                var flow = new FlowModel()
-                {
-                    CreateTime = DateTime.Now,
-                    Name = "aaa",
-                    LastModifyTime = DateTime.Now,
-                    UserId = 1,
-                };
-
-                //清理掉数据库中已存在的数据，为了接下来的插入测试
-                flowRepos.Delete(a => a.UserId == 1 && a.Name == "aaa");
-
-                using (var uow = fsql.CreateUnitOfWork())
-                {
-                    //关闭工作单元（不会开始事务）
-                    uow.Close();
-                    var uowFlowRepos = uow.GetRepository<FlowModel>();
-                    uowFlowRepos.Insert(flow);
-                    //已关闭工作单元，提不提交都没影响，此处注释来确定工作单元开关是否生效：关闭了，不Commit也应该插入数据
-                    //uow.Commit();
-                }
-
-                Assert.True(flowRepos.Select.Any(a => a.UserId == 1 && a.Name == "aaa"));
-            }
-
-        }
-
-        [Fact]
-        public void UnitOfWorkRepositoryWithDisableAfterInsert()
-        {
-            foreach (var fsql in new[] { g.sqlite, })
-            {
-                fsql.CodeFirst.ConfigEntity<FlowModel>(f =>
-                {
-                    f.Property(b => b.UserId).IsPrimary(true);
-                    f.Property(b => b.Id).IsPrimary(true).IsIdentity(true);
-                    f.Property(b => b.Name).IsNullable(false);
-                });
-
-                var flowRepos = fsql.GetRepository<FlowModel>();
-
-                //清理掉数据库中已存在的数据，为了接下来的插入测试
-                flowRepos.Delete(a => a.UserId == 1 && a.Name == "aaa");
-
-                var flow = new FlowModel()
-                {
-                    CreateTime = DateTime.Now,
-                    Name = "aaa",
-                    LastModifyTime = DateTime.Now,
-                    UserId = 1,
-                };
-
-
-                Assert.Throws<Exception>(() =>
-                {
-                    using (var uow = fsql.CreateUnitOfWork())
-                    {
-                        var uowFlowRepos = uow.GetRepository<FlowModel>();
-                        uowFlowRepos.Insert(flow);
-                        //有了任意 Insert/Update/Delete 调用关闭uow的方法将会发生异常
-                        uow.Close();
-                        uow.Commit();
-                    }
-
-                });
             }
         }
 
@@ -240,6 +167,7 @@ namespace FreeSql.Tests
                 {
                     var uowFlowRepos = uow.GetRepository<FlowModel>();
                     uowFlowRepos.Insert(flow);
+                    uowFlowRepos.Orm.Select<FlowModel>().ToList();
                     //不调用commit将不会提交数据库更改
                     //uow.Commit();
                 }
@@ -285,6 +213,7 @@ namespace FreeSql.Tests
         public void EnableAddOrUpdateNavigateList_OneToMany()
         {
             var repo = g.sqlite.GetRepository<Cagetory>();
+            repo.DbContextOptions.EnableAddOrUpdateNavigateList = true;
             var cts = new[] {
                 new Cagetory
                 {
@@ -320,6 +249,9 @@ namespace FreeSql.Tests
             cts[1].Goodss.Add(new Goods { Name = "商品55" });
             repo.Update(cts);
 
+            var cts2 = repo.Select.WhereDynamic(cts).IncludeMany(a => a.Goodss).ToList();
+            cts2[0].Goodss[0].Name += 123;
+            repo.Update(cts2[0]);
         }
         [Table(Name = "EAUNL_OTM_CT")]
         class Cagetory
@@ -418,6 +350,7 @@ namespace FreeSql.Tests
             repo.DbContextOptions.EnableAddOrUpdateNavigateList = true; //打开级联保存功能
             repo.Insert(cts);
 
+            var notreelist1 = repo.Select.ToList();
             var treelist1 = repo.Select.ToTreeList();
 
             //repo.SaveMany(cts[0], "Childs"); //指定保存 Childs 一对多属性
@@ -477,7 +410,9 @@ namespace FreeSql.Tests
             var repo = g.sqlite.GetRepository<Song>();
             repo.DbContextOptions.EnableAddOrUpdateNavigateList = true; //打开级联保存功能
             repo.Insert(ss);
-            //repo.SaveMany(ss[0], "Tags"); //指定保存 Tags 多对多属性
+
+            ss[0].Tags[0].TagName = "流行101";
+            repo.SaveMany(ss[0], "Tags"); //指定保存 Tags 多对多属性
 
             ss[0].Name = "爱你一万年.mp5";
             ss[0].Tags.Clear();
@@ -514,6 +449,53 @@ namespace FreeSql.Tests
             public Song Song { get; set; }
             public Guid TagId { get; set; }
             public Tag Tag { get; set; }
+        }
+
+        [Fact]
+        public void BeginEdit()
+        {
+            g.sqlite.Delete<BeginEdit01>().Where("1=1").ExecuteAffrows();
+            var repo = g.sqlite.GetRepository<BeginEdit01>();
+            var cts = new[] {
+                new BeginEdit01 { Name = "分类1" },
+                new BeginEdit01 { Name = "分类1_1" },
+                new BeginEdit01 { Name = "分类1_2" },
+                new BeginEdit01 { Name = "分类1_3" },
+                new BeginEdit01 { Name = "分类2" },
+                new BeginEdit01 { Name = "分类2_1" },
+                new BeginEdit01 { Name = "分类2_2" }
+            }.ToList();
+            repo.Insert(cts);
+
+            repo.BeginEdit(cts);
+
+            cts.Add(new BeginEdit01 { Name = "分类2_3" });
+            cts[0].Name = "123123";
+            cts.RemoveAt(1);
+
+            Assert.Equal(3, repo.EndEdit());
+
+            g.sqlite.Delete<BeginEdit01>().Where("1=1").ExecuteAffrows();
+            repo = g.sqlite.GetRepository<BeginEdit01>();
+            cts = repo.Select.ToList();
+            repo.BeginEdit(cts);
+
+            cts.AddRange(new[] {
+                new BeginEdit01 { Name = "分类1" },
+                new BeginEdit01 { Name = "分类1_1" },
+                new BeginEdit01 { Name = "分类1_2" },
+                new BeginEdit01 { Name = "分类1_3" },
+                new BeginEdit01 { Name = "分类2" },
+                new BeginEdit01 { Name = "分类2_1" },
+                new BeginEdit01 { Name = "分类2_2" }
+            });
+
+            Assert.Equal(7, repo.EndEdit());
+        }
+        class BeginEdit01
+        {
+            public Guid Id { get; set; }
+            public string Name { get; set; }
         }
     }
 }

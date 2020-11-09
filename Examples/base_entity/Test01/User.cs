@@ -8,10 +8,10 @@ using FreeSql;
 namespace EMSServerModel.Model
 {
 	/// <summary>
-	/// 用户表
+	/// 用户表bb123123
 	/// </summary>
 	[JsonObject(MemberSerialization.OptIn)]
-	public partial class User : BaseEntity<User, long>{
+	public partial class User : BaseEntity<User> {
 
 		//[JsonProperty, Column(IsIdentity = true)]
 		//public long Id { get; set; }
@@ -94,10 +94,13 @@ namespace EMSServerModel.Model
 		/// <summary>
 		/// 职务编号
 		/// </summary>
-		[JsonProperty]
-		public long? TitleId { get; set; }
+		[JsonProperty, Column(IsNullable = true)]
+		public long TitleId { get; set; }
 
-		
+		[JsonProperty]
+		public long TitleId2 { get; set; }
+
+
 		///// <summary>
 		///// 创建时间
 		///// </summary>

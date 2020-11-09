@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace FreeSql.PostgreSQL.Curd
 {
 
-    class PostgreSQLUpdate<T1> : Internal.CommonProvider.UpdateProvider<T1> where T1 : class
+    class PostgreSQLUpdate<T1> : Internal.CommonProvider.UpdateProvider<T1>
     {
 
         public PostgreSQLUpdate(IFreeSql orm, CommonUtils commonUtils, CommonExpression commonExpression, object dywhere)
@@ -18,7 +18,7 @@ namespace FreeSql.PostgreSQL.Curd
         {
         }
 
-        internal string InternalTableAlias;
+        internal string InternalTableAlias { get; set; }
         internal StringBuilder InternalSbSet => _set;
         internal StringBuilder InternalSbSetIncr => _setIncr;
         internal Dictionary<string, bool> InternalIgnore => _ignore;
@@ -52,8 +52,8 @@ namespace FreeSql.PostgreSQL.Curd
             Exception exception = null;
             try
             {
-                ret = _orm.Ado.Query<T1>(_connection, _transaction, CommandType.Text, sql, dbParms);
-                ValidateVersionAndThrow(ret.Count);
+                ret = _orm.Ado.Query<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
+                ValidateVersionAndThrow(ret.Count, sql, dbParms);
             }
             catch (Exception ex)
             {
@@ -83,7 +83,7 @@ namespace FreeSql.PostgreSQL.Curd
             {
                 if (pkidx > 0) caseWhen.Append(" || '+' || ");
                 if (string.IsNullOrEmpty(InternalTableAlias) == false) caseWhen.Append(InternalTableAlias).Append(".");
-                caseWhen.Append(_commonUtils.QuoteReadColumn(pk.CsType, pk.Attribute.MapType, _commonUtils.QuoteSqlName(pk.Attribute.Name))).Append("::varchar");
+                caseWhen.Append(_commonUtils.QuoteReadColumn(pk.CsType, pk.Attribute.MapType, _commonUtils.QuoteSqlName(pk.Attribute.Name))).Append("::text");
                 ++pkidx;
             }
             caseWhen.Append(")");
@@ -93,7 +93,7 @@ namespace FreeSql.PostgreSQL.Curd
         {
             if (_table.Primarys.Length == 1)
             {
-                sb.Append(_commonUtils.FormatSql("{0}", _table.Primarys.First().GetMapValue(d)));
+                sb.Append(_commonUtils.FormatSql("{0}", _table.Primarys[0].GetDbValue(d)));
                 return;
             }
             sb.Append("(");
@@ -101,7 +101,7 @@ namespace FreeSql.PostgreSQL.Curd
             foreach (var pk in _table.Primarys)
             {
                 if (pkidx > 0) sb.Append(" || '+' || ");
-                sb.Append(_commonUtils.FormatSql("{0}", pk.GetMapValue(d))).Append("::varchar");
+                sb.Append(_commonUtils.FormatSql("{0}", pk.GetDbValue(d))).Append("::text");
                 ++pkidx;
             }
             sb.Append(")");
@@ -110,6 +110,11 @@ namespace FreeSql.PostgreSQL.Curd
         protected override void ToSqlCaseWhenEnd(StringBuilder sb, ColumnInfo col)
         {
             if (_noneParameter == false) return;
+            if (col.Attribute.MapType == typeof(string))
+            {
+                sb.Append("::text");
+                return;
+            }
             var dbtype = _commonUtils.CodeFirst.GetDbInfo(col.Attribute.MapType)?.dbtype;
             if (dbtype == null) return;
 
@@ -118,8 +123,8 @@ namespace FreeSql.PostgreSQL.Curd
 
 #if net40
 #else
-        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(500, 3000);
-        public override Task<List<T1>> ExecuteUpdatedAsync() => base.SplitExecuteUpdatedAsync(500, 3000);
+        public override Task<int> ExecuteAffrowsAsync() => base.SplitExecuteAffrowsAsync(_batchRowsLimit > 0 ? _batchRowsLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 3000);
+        public override Task<List<T1>> ExecuteUpdatedAsync() => base.SplitExecuteUpdatedAsync(_batchRowsLimit > 0 ? _batchRowsLimit : 500, _batchParameterLimit > 0 ? _batchParameterLimit : 3000);
         
         async protected override Task<List<T1>> RawExecuteUpdatedAsync()
         {
@@ -144,8 +149,8 @@ namespace FreeSql.PostgreSQL.Curd
             Exception exception = null;
             try
             {
-                ret = await _orm.Ado.QueryAsync<T1>(_connection, _transaction, CommandType.Text, sql, dbParms);
-                ValidateVersionAndThrow(ret.Count);
+                ret = await _orm.Ado.QueryAsync<T1>(_table.TypeLazy ?? _table.Type, _connection, _transaction, CommandType.Text, sql, _commandTimeout, dbParms);
+                ValidateVersionAndThrow(ret.Count, sql, dbParms);
             }
             catch (Exception ex)
             {
