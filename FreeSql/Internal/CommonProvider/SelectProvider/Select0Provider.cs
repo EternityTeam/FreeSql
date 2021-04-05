@@ -36,12 +36,13 @@ namespace FreeSql.Internal.CommonProvider
         public List<Action<object>> _includeToList = new List<Action<object>>();
 #if net40
 #else
-        public List<Func<object, Task>> _includeToListAsync = new List<Func<object, Task>>();
+        public List<Func<object, CancellationToken, Task>> _includeToListAsync = new List<Func<object, CancellationToken, Task>>();
 #endif
         public Dictionary<string, MemberExpression[]> _includeInfo = new Dictionary<string, MemberExpression[]>();
         public bool _distinct;
         public Expression _selectExpression;
         public List<GlobalFilter.Item> _whereGlobalFilter;
+        public Func<bool> _cancel;
 
         int _disposeCounter;
         ~Select0Provider()
@@ -61,6 +62,7 @@ namespace FreeSql.Internal.CommonProvider
             _includeInfo.Clear();
             _selectExpression = null;
             _whereGlobalFilter?.Clear();
+            _cancel = null;
         }
 
         public static void CopyData(Select0Provider from, Select0Provider to, ReadOnlyCollection<ParameterExpression> lambParms)
@@ -114,11 +116,12 @@ namespace FreeSql.Internal.CommonProvider
             to._includeToList = new List<Action<object>>(from._includeToList.ToArray());
 #if net40
 #else
-            to._includeToListAsync = new List<Func<object, Task>>(from._includeToListAsync.ToArray());
+            to._includeToListAsync = new List<Func<object, CancellationToken, Task>>(from._includeToListAsync.ToArray());
 #endif
             to._distinct = from._distinct;
             to._selectExpression = from._selectExpression;
             to._whereGlobalFilter = new List<GlobalFilter.Item>(from._whereGlobalFilter.ToArray());
+            to._cancel = from._cancel;
         }
 
         public Expression ConvertStringPropertyToExpression(string property, bool fromFirstTable = false)
@@ -151,7 +154,7 @@ namespace FreeSql.Internal.CommonProvider
                 var currentType = firstTb.Table.Type;
                 Expression currentExp = firstTb.Parameter;
 
-                for (var x = 0; x < field.Length; x++)
+                for (var x = firstTbs.Length == 1 ? 1 : 0; x < field.Length; x++)
                 {
                     var tmp1 = field[x];
                     if (_commonUtils.GetTableByEntity(currentType).Properties.TryGetValue(tmp1, out var prop) == false)
@@ -180,6 +183,12 @@ namespace FreeSql.Internal.CommonProvider
         public TSelect TrackToList(Action<object> track)
         {
             _trackToList = track;
+            return this as TSelect;
+        }
+
+        public TSelect Cancel(Func<bool> cancel)
+        {
+            _cancel = cancel;
             return this as TSelect;
         }
 
@@ -231,7 +240,8 @@ namespace FreeSql.Internal.CommonProvider
         }
         public TSelect RightJoin(Expression<Func<T1, bool>> exp)
         {
-            if (exp == null) return this as TSelect; _tables[0].Parameter = exp.Parameters[0];
+            if (exp == null) return this as TSelect; 
+            _tables[0].Parameter = exp.Parameters[0];
             return this.InternalJoin(exp?.Body, SelectTableInfoType.RightJoin);
         }
         public TSelect LeftJoin<T2>(Expression<Func<T1, T2, bool>> exp)
@@ -505,6 +515,7 @@ namespace FreeSql.Internal.CommonProvider
         {
             if (filter == null) return this as TSelect;
             var sb = new StringBuilder();
+            if (IsIgnoreFilter(filter)) filter.Field = "";
             ParseFilter(DynamicFilterLogic.And, filter, true);
             this.Where(sb.ToString());
             sb.Clear();
@@ -515,6 +526,17 @@ namespace FreeSql.Internal.CommonProvider
                 if (string.IsNullOrEmpty(fi.Field) == false)
                 {
                     Expression exp = ConvertStringPropertyToExpression(fi.Field);
+                    switch (fi.Operator)
+                    {
+                        case DynamicFilterOperator.Contains:
+                        case DynamicFilterOperator.StartsWith:
+                        case DynamicFilterOperator.EndsWith:
+                        case DynamicFilterOperator.NotContains:
+                        case DynamicFilterOperator.NotStartsWith:
+                        case DynamicFilterOperator.NotEndsWith:
+                            if (exp.Type != typeof(string)) exp = Expression.TypeAs(exp, typeof(string));
+                            break;
+                    }
                     switch (fi.Operator)
                     {
                         case DynamicFilterOperator.Contains: exp = Expression.Call(exp, MethodStringContains, Expression.Constant(Utils.GetDataReaderValue(exp.Type, fi.Value?.ToString()), exp.Type)); break;
@@ -602,12 +624,17 @@ namespace FreeSql.Internal.CommonProvider
                 }
                 if (fi.Filters?.Any() == true)
                 {
-                    if (string.IsNullOrEmpty(fi.Field) == false)
-                        sb.Append(" AND ");
-                    if (fi.Logic == DynamicFilterLogic.Or) sb.Append("(");
-                    for (var x = 0; x < fi.Filters.Count; x++)
-                        ParseFilter(fi.Logic, fi.Filters[x], x == fi.Filters.Count - 1);
-                    if (fi.Logic == DynamicFilterLogic.Or) sb.Append(")");
+                    fi.Filters = fi.Filters.Where(a => IsIgnoreFilter(a) == false).ToList(); //忽略 like '%%'
+
+                    if (fi.Filters.Any())
+                    {
+                        if (string.IsNullOrEmpty(fi.Field) == false)
+                            sb.Append(" AND ");
+                        if (fi.Logic == DynamicFilterLogic.Or) sb.Append("(");
+                        for (var x = 0; x < fi.Filters.Count; x++)
+                            ParseFilter(fi.Logic, fi.Filters[x], x == fi.Filters.Count - 1);
+                        if (fi.Logic == DynamicFilterLogic.Or) sb.Append(")");
+                    }
                 }
 
                 if (isend == false)
@@ -621,6 +648,13 @@ namespace FreeSql.Internal.CommonProvider
                         }
                     }
                 }
+            }
+
+            bool IsIgnoreFilter(DynamicFilterInfo testFilter)
+            {
+                return string.IsNullOrEmpty(testFilter.Field) == false &&
+                    new[] { DynamicFilterOperator.Contains, DynamicFilterOperator.StartsWith, DynamicFilterOperator.EndsWith }.Contains(testFilter.Operator) &&
+                    string.IsNullOrEmpty(testFilter.Value?.ToString());
             }
         }
 
@@ -687,14 +721,25 @@ namespace FreeSql.Internal.CommonProvider
         public long Count()
         {
             var tmpOrderBy = _orderby;
+            var tmpSkip = _skip;
+            var tmpLimit = _limit;
+            var tmpDistinct = _distinct;
             _orderby = null; //解决 select count(1) from t order by id 这样的 SQL 错误
+            _skip = 0;
+            _limit = 0;
+            _distinct = false;
             try
             {
-                return this.ToList<int>($"count(1){_commonUtils.FieldAsAlias("as1")}").Sum(); //这里的 Sum 为了分表查询
+                var countField = "1";
+                if (tmpDistinct && _selectExpression != null) countField = $"distinct {this.GetExpressionField(_selectExpression, FieldAliasOptions.AsProperty).field}";
+                return this.ToList<int>($"count({countField}){_commonUtils.FieldAsAlias("as1")}").Sum(); //这里的 Sum 为了分表查询
             }
             finally
             {
                 _orderby = tmpOrderBy;
+                _skip = tmpSkip;
+                _limit = tmpLimit;
+                _distinct = tmpDistinct;
             }
         }
         public TSelect Count(out long count)
@@ -716,35 +761,46 @@ namespace FreeSql.Internal.CommonProvider
 
 #if net40
 #else
-        async public Task<bool> AnyAsync()
+        async public Task<bool> AnyAsync(CancellationToken cancellationToken = default)
         {
             this.Limit(1);
-            return (await this.ToListAsync<int>($"1{_commonUtils.FieldAsAlias("as1")}")).Sum() > 0; //这里的 Sum 为了分表查询
+            return (await this.ToListAsync<int>($"1{_commonUtils.FieldAsAlias("as1")}", cancellationToken)).Sum() > 0; //这里的 Sum 为了分表查询
         }
-        async public Task<long> CountAsync()
+        async public Task<long> CountAsync(CancellationToken cancellationToken = default)
         {
             var tmpOrderBy = _orderby;
+            var tmpSkip = _skip;
+            var tmpLimit = _limit;
+            var tmpDistinct = _distinct;
             _orderby = null;
+            _skip = 0;
+            _limit = 0;
+            _distinct = false;
             try
             {
-                return (await this.ToListAsync<int>($"count(1){_commonUtils.FieldAsAlias("as1")}")).Sum(); //这里的 Sum 为了分表查询
+                var countField = "1";
+                if (tmpDistinct && _selectExpression != null) countField = $"distinct {this.GetExpressionField(_selectExpression, FieldAliasOptions.AsProperty).field}";
+                return (await this.ToListAsync<int>($"count({countField}){_commonUtils.FieldAsAlias("as1")}", cancellationToken)).Sum(); //这里的 Sum 为了分表查询
             }
             finally
             {
                 _orderby = tmpOrderBy;
+                _skip = tmpSkip;
+                _limit = tmpLimit;
+                _distinct = tmpDistinct;
             }
         }
-        public virtual Task<List<T1>> ToListAsync(bool includeNestedMembers = false)
+        public virtual Task<List<T1>> ToListAsync(bool includeNestedMembers = false, CancellationToken cancellationToken = default)
         {
-            if (_selectExpression != null) return this.InternalToListAsync<T1>(_selectExpression);
-            return this.ToListPrivateAsync(includeNestedMembers == false ? this.GetAllFieldExpressionTreeLevel2() : this.GetAllFieldExpressionTreeLevelAll(), null);
+            if (_selectExpression != null) return this.InternalToListAsync<T1>(_selectExpression, cancellationToken);
+            return this.ToListPrivateAsync(includeNestedMembers == false ? this.GetAllFieldExpressionTreeLevel2() : this.GetAllFieldExpressionTreeLevelAll(), null, cancellationToken);
         }
-        async public Task<T1> ToOneAsync()
+        async public Task<T1> ToOneAsync(CancellationToken cancellationToken = default)
         {
             this.Limit(1);
-            return (await this.ToListAsync()).FirstOrDefault();
+            return (await this.ToListAsync(false, cancellationToken)).FirstOrDefault();
         }
-        public Task<T1> FirstAsync() => this.ToOneAsync();
+        public Task<T1> FirstAsync(CancellationToken cancellationToken = default) => this.ToOneAsync(cancellationToken);
 #endif
     }
 }

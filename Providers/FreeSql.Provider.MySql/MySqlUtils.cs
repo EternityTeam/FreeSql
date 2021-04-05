@@ -34,7 +34,7 @@ namespace FreeSql.MySql
                         break;
                     default:
                         dbtype = dbtype2;
-                        if (col.DbSize != 0) ret.Size = col.DbSize;
+                        //if (col.DbSize != 0) ret.Size = col.DbSize;
                         if (col.DbPrecision != 0) ret.Precision = col.DbPrecision;
                         if (col.DbScale != 0) ret.Scale = col.DbScale;
                         break;
@@ -99,7 +99,7 @@ namespace FreeSql.MySql
         public override string Now => "now()";
         public override string NowUtc => "utc_timestamp()";
 
-        public override string QuoteWriteParamter(Type type, string paramterName)
+        public override string QuoteWriteParamterAdapter(Type type, string paramterName)
         {
             switch (type.FullName)
             {
@@ -112,7 +112,7 @@ namespace FreeSql.MySql
             }
             return paramterName;
         }
-        public override string QuoteReadColumn(Type type, Type mapType, string columnName)
+        protected override string QuoteReadColumnAdapter(Type type, Type mapType, string columnName)
         {
             switch (mapType.FullName)
             {

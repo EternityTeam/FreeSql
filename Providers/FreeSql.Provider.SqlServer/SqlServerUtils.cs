@@ -39,7 +39,7 @@ namespace FreeSql.SqlServer
                 if (dbtype != SqlDbType.Variant)
                 {
                     ret.SqlDbType = dbtype;
-                    if (col.DbSize != 0) ret.Size = col.DbSize;
+                    //if (col.DbSize != 0) ret.Size = col.DbSize;
                     if (col.DbPrecision != 0) ret.Precision = col.DbPrecision;
                     if (col.DbScale != 0) ret.Scale = col.DbScale;
                 }
@@ -100,8 +100,8 @@ namespace FreeSql.SqlServer
         public override string Now => "getdate()";
         public override string NowUtc => "getutcdate()";
 
-        public override string QuoteWriteParamter(Type type, string paramterName) => paramterName;
-        public override string QuoteReadColumn(Type type, Type mapType, string columnName) => columnName;
+        public override string QuoteWriteParamterAdapter(Type type, string paramterName) => paramterName;
+        protected override string QuoteReadColumnAdapter(Type type, Type mapType, string columnName) => columnName;
 
         public override string GetNoneParamaterSqlValue(List<DbParameter> specialParams, string specialParamFlag, ColumnInfo col, Type type, object value)
         {

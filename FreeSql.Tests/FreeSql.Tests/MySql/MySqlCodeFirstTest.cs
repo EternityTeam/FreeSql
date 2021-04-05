@@ -12,6 +12,31 @@ namespace FreeSql.Tests.MySql
     public class MySqlCodeFirstTest
     {
         [Fact]
+        public void InsertUpdateParameter()
+        {
+            var fsql = g.mysql;
+            fsql.CodeFirst.SyncStructure<ts_iupstr_bak>();
+            var item = new ts_iupstr { id = Guid.NewGuid(), title = string.Join(",", Enumerable.Range(0, 2000).Select(a => "我是中国人")) };
+            Assert.Equal(1, fsql.Insert(item).ExecuteAffrows());
+            var find = fsql.Select<ts_iupstr>().Where(a => a.id == item.id).First();
+            Assert.NotNull(find);
+            Assert.Equal(find.id, item.id);
+            Assert.Equal(find.title, item.title);
+        }
+        [Table(Name = "ts_iupstr_bak", DisableSyncStructure = true)]
+        class ts_iupstr
+        {
+            public Guid id { get; set; }
+            public string title { get; set; }
+        }
+        class ts_iupstr_bak
+        {
+            public Guid id { get; set; }
+            [Column(StringLength = -1)]
+            public string title { get; set; }
+        }
+
+        [Fact]
         public void Timestamp01()
         {
             var fsql = g.mysql;
@@ -240,6 +265,28 @@ namespace FreeSql.Tests.MySql
         {
             public Guid Id { get; set; }
             [Column(StringLength = -2)]
+            public string Data { get; set; }
+        }
+
+        [Fact]
+        public void Text_MaxLength_2()
+        {
+            var str1 = string.Join(",", Enumerable.Range(0, 10000).Select(a => "我是中国人"));
+
+            var item1 = new TS_TEXT041 { Data = str1 };
+            Assert.Equal(1, g.mysql.Insert(item1).ExecuteAffrows());
+
+            var item2 = g.mysql.Select<TS_TEXT041>().Where(a => a.Id == item1.Id).First();
+            Assert.Equal(str1, item2.Data);
+
+            //NoneParameter
+            item1 = new TS_TEXT041 { Data = str1 };
+            Assert.Equal(1, g.mysql.Insert(item1).NoneParameter().ExecuteAffrows());
+        }
+        class TS_TEXT041
+        {
+            public Guid Id { get; set; }
+            [MaxLength(-2)]
             public string Data { get; set; }
         }
 
